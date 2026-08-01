@@ -1,0 +1,22 @@
+[project]
+name = "concept-dim"
+version = "0.1.0"
+description = "Проект concept_dim: исследовательский код поверх geometry-of-refusal."
+requires-python = ">=3.10,<3.11"
+dependencies = [
+    "geometry-of-refusal",
+]
+
+# geometry-of-refusal берётся как editable из соседнего репозитория.
+# Относительный путь ../geometry-of-refusal одинаков локально и на сервере
+# (обе папки лежат рядом: локально в disser/, на сервере в ~/f.zakharov/).
+[tool.uv.sources]
+geometry-of-refusal = { path = "../geometry-of-refusal", editable = true }
+
+# concept_dim сам по себе — рабочая папка со скриптами, не распространяемый пакет.
+[tool.uv]
+package = false
+# Окружение разворачивается только на сервере (Linux). Локальный Intel-Mac не тянет
+# стек nnsight/torch>=2.4 (нет колёс под Intel-macOS), поэтому lock/sync — под Linux.
+# Mac используется только для редактирования кода и git.
+environments = ["sys_platform == 'linux'"]
