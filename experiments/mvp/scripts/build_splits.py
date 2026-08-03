@@ -41,6 +41,25 @@ def emit(records, path):
         json.dump(records, f, ensure_ascii=False, indent=2)
 
 
+def stratified_sample(pool, n, strat_col, seed):
+    """Стратифицированная выборка n строк из pool с сохранением пропорций strat_col
+    (по самому мелкому уровню — 3-category). Распределение остатка — по наибольшей
+    дробной части (largest-remainder), чтобы сумма была ровно n."""
+    counts = pool[strat_col].value_counts()
+    exact = counts / counts.sum() * n
+    alloc = exact.apply(int)                       # floor
+    rem = n - int(alloc.sum())
+    fracs = (exact - alloc).sort_values(ascending=False)
+    for cat in list(fracs.index)[:rem]:
+        alloc[cat] += 1
+    parts = []
+    for cat, k in alloc.items():
+        if k > 0:
+            grp = pool[pool[strat_col] == cat]
+            parts.append(grp.sample(n=min(int(k), len(grp)), random_state=seed))
+    return pd.concat(parts).sample(frac=1, random_state=seed)  # перемешать
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--fork", default="../geometry-of-refusal")
@@ -79,13 +98,21 @@ def main():
         counts = {}
         for split, n in SIZES.items():
             k = min(n, len(pool))
-            s = pool.sample(n=k, random_state=args.seed + SEED_OFFSET[split])
+            # стратифицируем по листу (3-category) — сохраняем внутренние пропорции ступени
+            s = stratified_sample(pool, k, "3-category", args.seed + SEED_OFFSET[split])
             harmful = [{"instruction": q, "source": f"salad:{name}"}
                        for q in s["question"].tolist()]
             emit(harmful, os.path.join(out_dir, f"harmful_{split}.json"))
             emit(harmless_splits[split], os.path.join(out_dir, f"harmless_{split}.json"))
             counts[split] = len(harmful)
-        print(f"{name:20s} пул={len(pool):5d} -> harmful {counts}  ({out_dir})")
+        # для наглядности — распределение train по листьям
+        train_s = stratified_sample(pool, min(SIZES["train"], len(pool)), "3-category",
+                                    args.seed + SEED_OFFSET["train"])
+        leaf_dist = train_s["3-category"].value_counts().to_dict()
+        print(f"{name:20s} пул={len(pool):5d} -> harmful {counts}")
+        if len(leaf_dist) > 1:
+            top = dict(list(train_s["3-category"].value_counts().items())[:4])
+            print(f"    train по листьям ({len(leaf_dist)} шт.), топ-4: {top}")
 
     print("готово.")
 
