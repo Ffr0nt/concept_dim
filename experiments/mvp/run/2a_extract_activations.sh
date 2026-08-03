@@ -13,6 +13,9 @@
 #   RUNGS  — список ступеней через пробел (по умолчанию все три)
 set -euo pipefail
 
+# uv установлен в ~/.cargo/bin (или ~/.local/bin), но интерактивный шелл может их не видеть
+export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
+
 cd "$(dirname "$0")/../../.."   # -> корень concept_dim
 
 GPU="${GPU:-3}"
