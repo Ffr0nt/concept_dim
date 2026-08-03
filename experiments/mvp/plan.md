@@ -25,8 +25,9 @@
 ---
 
 ## Этап 0 — Пререквизиты 📝🖥️
-- Доступ к `google/gemma-2-2b-it` (gated на HF) + токен; `.env` в форке:
-  `HUGGINGFACE_CACHE_DIR`, `SAVE_DIR`, `DIM_DIR` (шаблон `.env_example`).
+- Модель — **`Qwen/Qwen2.5-3B-Instruct`** (открыта, уже в кэше сервера, поддержана репо:
+  `qwen_model.py` + `QWEN25_CHAT_TEMPLATE`). gemma отклонена: gated и не в кэше.
+  `.env` в форке: `HUGGINGFACE_CACHE_DIR`, `SAVE_DIR`, `DIM_DIR` (шаблон `.env_example`).
 - **wandb выключить** (`WANDB_MODE=disabled` / offline-стаб) — политика.
 - **DIM-направление — своё на каждую ступень.** rdo.py его НЕ генерирует: при отсутствии
   файлов кидает `FileNotFoundError` (rdo.py:180-183). Поэтому **заранее** посчитать DIM
@@ -62,7 +63,7 @@
   per-d** `bypass` и `retain` (+ `lowest_loss_vector.pt` по каждой d) — чтобы Этап 4 был CPU.
 - **3b 🖥️** на каждую ступень (с её `DIM_DIR` из Этапа 0):
   `DIM_DIR=dim/<rung> rdo.py --train_cone --min_cone_dim 1 --max_cone_dim D
-  --splits <rung> --model google/gemma-2-2b-it` (сначала генерит targets — GPU, затем
+  --splits <rung> --model Qwen/Qwen2.5-3B-Instruct` (сначала генерит targets — GPU, затем
   обучает конусы d=1…D). Каждая ступень использует свой DIM.
 - **Компьют:** 3 ступени × D обучений конуса (один сид) — основной GPU-расход пилота.
 
