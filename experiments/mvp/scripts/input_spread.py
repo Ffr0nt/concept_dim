@@ -23,6 +23,12 @@ def mean_pairwise_one_minus_cos(acts: torch.Tensor) -> float:
     return float(1.0 - off_mean)
 
 
+def centered_one_minus_cos(acts: torch.Tensor) -> float:
+    """То же, но после вычитания среднего вектора ступени — убирает общую компоненту,
+    меряет разброс концепта вокруг его центра (а не общий сдвиг активаций)."""
+    return mean_pairwise_one_minus_cos(acts.float() - acts.float().mean(dim=0, keepdim=True))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--artifacts", default=None,
@@ -37,11 +43,12 @@ def main():
 
     rows = []
     for f in files:
-        d = torch.load(f, map_location="cpu")
-        val = mean_pairwise_one_minus_cos(d["acts"])
-        rows.append((d.get("splits"), d.get("layer"), d["acts"].shape[0], val))
+        d = torch.load(f, map_location="cpu", weights_only=False)
+        raw = mean_pairwise_one_minus_cos(d["acts"])
+        cen = centered_one_minus_cos(d["acts"])
+        rows.append((d.get("splits"), d.get("layer"), d["acts"].shape[0], raw, cen))
         print(f"{str(d.get('splits')):20s} L={d.get('layer')} "
-              f"N={d['acts'].shape[0]:4d}  1-cos={val:.4f}")
+              f"N={d['acts'].shape[0]:4d}  1-cos(raw)={raw:.4f}  1-cos(centered)={cen:.4f}")
     return rows
 
 
