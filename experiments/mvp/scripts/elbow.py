@@ -2,14 +2,17 @@
 
 Критерий d* (совпадает с определением конуса «сколько ортогональных направлений
 всё ещё работают как направления отказа»):
-  d*_induce : наибольшая d, при которой КРАЕВОЙ (d-й) базисный вектор всё ещё
-              навязывает отказ на harmless_test, induce_marginal[d] >= frac * induce_marginal[1].
-              Как только новое измерение перестаёт быть направлением отказа — конус исчерпан.
+  d*_weakest : наибольшая d, при которой ВСЕ d осей конуса ещё наводят отказ на
+               held-out harmless — т.е. слабейшая ось weakest_induce(d)=min_k induce_k > 0.
+               Как только среди d осей появляется «пустая» (переобученный шум,
+               на тесте induce<0) — конус исчерпан, d* = d-1.
+               Аблация (bypass/ASR) для d* бесполезна: насыщается уже на d=1
+               (одной оси хватает, чтобы снять отказ), ступени не различает.
 Кросс-проверка:
-  d*_knee   : «локоть» кривой bypass-ASR(d) (kneedle: макс. отклонение от хорды).
+  d*_knee    : «локоть» кривой bypass-ASR(d) (kneedle) — для контроля, обычно ~1.
 
 CPU. Запуск (на сервере или на Mac, если скопировать eval_test.json):
-  python elbow.py --base <fork>/results/cones   [--frac 0.5]
+  python elbow.py --base <fork>/results/cones
 Пишет reports/output-axis.md-совместимую таблицу в stdout и (если есть matplotlib)
 график PR->d* в reports/.
 """
@@ -23,14 +26,14 @@ LABELS = {"theft": "лист", "illegal_activities": "задача", "malicious_
 PR_L12 = {"theft": 11.25, "illegal_activities": 12.01, "malicious_use": 12.56}
 
 
-def d_star_induce(dims, frac):
+def d_star_weakest(dims, margin=0.0):
+    """d* = длина непрерывного префикса d, где слабейшая ось конуса ещё наводит
+    отказ: weakest_induce(d) = per_basis_induce_min > margin."""
     if not dims:
         return None
-    base = dims[0]["induce_marginal"]
-    thr = frac * base if base > 0 else 0.0
     best = 0
     for r in dims:
-        if r["induce_marginal"] >= thr:
+        if r["per_basis_induce_min"] > margin:
             best = r["dim"]
         else:
             break
@@ -59,27 +62,28 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="../geometry-of-refusal/results/cones",
                     help="каталог с <rung>/eval_test.json")
-    ap.add_argument("--frac", type=float, default=0.5,
-                    help="порог induce краевого вектора относительно d=1")
+    ap.add_argument("--margin", type=float, default=0.0,
+                    help="порог для слабейшей оси: weakest_induce > margin")
     ap.add_argument("--out", default="experiments/mvp/reports")
     args = ap.parse_args()
 
     summary = {}
-    print(f"{'rung':<20} {'PR(L12)':>8}  {'d*_induce':>9} {'d*_knee':>8}   кривые")
+    print(f"{'rung':<20} {'PR(L12)':>8}  {'d*_weakest':>10} {'d*_knee':>8}")
     for r in RUNGS:
         f = os.path.join(args.base, r, "eval_test.json")
         if not os.path.exists(f):
             print(f"{r:<20} нет {f}")
             continue
         dims = json.load(open(f))["dims"]
-        ds_i = d_star_induce(dims, args.frac)
+        ds_i = d_star_weakest(dims, args.margin)
         ds_k = d_star_knee(dims)
         summary[r] = {"d_induce": ds_i, "d_knee": ds_k, "dims": dims}
-        asr = " ".join(f"{x['bypass_asr']:.2f}" for x in dims)
-        ind = " ".join(f"{x['induce_marginal']:+.1f}" for x in dims)
-        print(f"{r:<20} {PR_L12.get(r, float('nan')):>8.2f}  {str(ds_i):>9} {str(ds_k):>8}")
-        print(f"{'':<20} {'':>8}  ASR:    {asr}")
-        print(f"{'':<20} {'':>8}  induceₘ:{ind}")
+        weak = " ".join(f"{x['per_basis_induce_min']:+.1f}" for x in dims)
+        byp = " ".join(f"{x['bypass_mean']:+.1f}" for x in dims)
+        capped = "≥" if ds_i == len(dims) else ""
+        print(f"{r:<20} {PR_L12.get(r, float('nan')):>8.2f}  {capped + str(ds_i):>10} {str(ds_k):>8}")
+        print(f"{'':<20} {'':>8}  weakest_induce: {weak}")
+        print(f"{'':<20} {'':>8}  bypass_mean:    {byp}")
 
     # финальная сводка PR -> d*
     print("\n=== PR (вход) -> d* (выход) ===")
