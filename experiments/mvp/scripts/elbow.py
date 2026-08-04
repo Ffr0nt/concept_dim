@@ -26,18 +26,33 @@ LABELS = {"theft": "лист", "illegal_activities": "задача", "malicious_
 PR_L12 = {"theft": 11.25, "illegal_activities": 12.01, "malicious_use": 12.56}
 
 
-def d_star_weakest(dims, margin=0.0):
-    """d* = длина непрерывного префикса d, где слабейшая ось конуса ещё наводит
-    отказ: weakest_induce(d) = per_basis_induce_min > margin."""
-    if not dims:
-        return None
+def _prefix(dims, ok):
+    """длина непрерывного префикса d (с d=1), где ok(row) истинно."""
     best = 0
     for r in dims:
-        if r["per_basis_induce_min"] > margin:
+        if ok(r):
             best = r["dim"]
         else:
             break
     return best
+
+
+# три операционализации «размерности конуса»:
+def d_star_induce(dims):
+    """достаточность: все d осей наводят отказ при добавлении (weakest_induce>0)."""
+    return _prefix(dims, lambda r: r["per_basis_induce_min"] > 0)
+
+
+def d_star_single(dims):
+    """необходимость (одиночная): каждая ось сама по себе снимает отказ при аблации
+    (слабейшая одиночная аблация per_basis_bypass_max < 0)."""
+    return _prefix(dims, lambda r: r["per_basis_bypass_max"] < 0)
+
+
+def d_star_loo(dims):
+    """необходимость (leave-one-out): каждая ось независимо нужна — при аблации конуса
+    без неё отказ восстанавливается (loo_bypass_min > 0)."""
+    return _prefix(dims, lambda r: r.get("loo_bypass_min", -1.0) > 0)
 
 
 def d_star_knee(dims):
@@ -58,64 +73,76 @@ def d_star_knee(dims):
     return best_d
 
 
+CRITERIA = [
+    ("induce", "достаточность (add→отказ)", d_star_induce, "per_basis_induce_min"),
+    ("single", "необходимость одиночн. (ablate 1→нет отказа)", d_star_single, "per_basis_bypass_max"),
+    ("loo", "необходимость LOO (ablate all−k→отказ)", d_star_loo, "loo_bypass_min"),
+]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="../geometry-of-refusal/results/cones",
                     help="каталог с <rung>/eval_test.json")
-    ap.add_argument("--margin", type=float, default=0.0,
-                    help="порог для слабейшей оси: weakest_induce > margin")
     ap.add_argument("--out", default="experiments/mvp/reports")
     args = ap.parse_args()
 
     summary = {}
-    print(f"{'rung':<20} {'PR(L12)':>8}  {'d*_weakest':>10} {'d*_knee':>8}")
     for r in RUNGS:
         f = os.path.join(args.base, r, "eval_test.json")
         if not os.path.exists(f):
             print(f"{r:<20} нет {f}")
             continue
         dims = json.load(open(f))["dims"]
-        ds_i = d_star_weakest(dims, args.margin)
-        ds_k = d_star_knee(dims)
-        summary[r] = {"d_induce": ds_i, "d_knee": ds_k, "dims": dims}
-        weak = " ".join(f"{x['per_basis_induce_min']:+.1f}" for x in dims)
-        byp = " ".join(f"{x['bypass_mean']:+.1f}" for x in dims)
-        capped = "≥" if ds_i == len(dims) else ""
-        print(f"{r:<20} {PR_L12.get(r, float('nan')):>8.2f}  {capped + str(ds_i):>10} {str(ds_k):>8}")
-        print(f"{'':<20} {'':>8}  weakest_induce: {weak}")
-        print(f"{'':<20} {'':>8}  bypass_mean:    {byp}")
+        ds = {name: fn(dims) for name, _, fn, _ in CRITERIA}
+        summary[r] = {"d": ds, "dims": dims, "n": len(dims)}
+        print(f"\n## {r}  (PR={PR_L12.get(r, float('nan')):.2f}, n={len(dims)})")
+        for name, desc, _, key in CRITERIA:
+            cap = "≥" if ds[name] == len(dims) else " "
+            curve = " ".join(f"{x[key]:+.1f}" for x in dims)
+            print(f"  d*_{name:<7}={cap}{ds[name]}  [{desc}]")
+            print(f"           {key}: {curve}")
 
-    # финальная сводка PR -> d*
-    print("\n=== PR (вход) -> d* (выход) ===")
-    print(f"{'ступень':<10} {'PR(L12)':>8} {'d*':>4}")
-    order_ok = []
+    # сводная таблица: PR -> d* по трём критериям
+    print("\n=== PR (вход) -> d* (выход), три критерия ===")
+    hdr = f"{'ступень':<8} {'PR':>6} " + " ".join(f"{n:>8}" for n, *_ in CRITERIA)
+    print(hdr)
     for r in RUNGS:
-        if r in summary:
-            ds = summary[r]["d_induce"]
-            order_ok.append(ds)
-            print(f"{LABELS[r]:<10} {PR_L12[r]:>8.2f} {str(ds):>4}")
-    if len(order_ok) == 3 and all(x is not None for x in order_ok):
-        mono = order_ok[0] <= order_ok[1] <= order_ok[2]
-        print(f"\nлестница d*: {order_ok}  ->  "
-              f"{'✅ монотонно (лист<=задача<=домен)' if mono else '✗ немонотонно'}")
+        if r not in summary:
+            continue
+        cells = []
+        for name, *_ in CRITERIA:
+            v = summary[r]["d"][name]
+            cells.append(("≥" if v == summary[r]["n"] else "") + str(v))
+        print(f"{LABELS[r]:<8} {PR_L12[r]:>6.2f} " + " ".join(f"{c:>8}" for c in cells))
+    # монотонность по каждому критерию
+    print()
+    for name, *_ in CRITERIA:
+        vals = [summary[r]["d"][name] for r in RUNGS if r in summary]
+        if len(vals) == 3:
+            mono = vals[0] <= vals[1] <= vals[2] and vals[0] < vals[2]
+            print(f"  {name:<7}: {vals}  {'✅ монотонно растёт' if mono else '✗ не поддерживает лестницу'}")
 
-    # график, если есть matplotlib
+    # график: три критерия vs PR
     try:
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
         os.makedirs(args.out, exist_ok=True)
         prs = [PR_L12[r] for r in RUNGS if r in summary]
-        dss = [summary[r]["d_induce"] for r in RUNGS if r in summary]
-        fig, ax = plt.subplots(figsize=(5, 4))
-        ax.plot(prs, dss, "o-", color="#c0392b")
-        for r in RUNGS:
-            if r in summary:
-                ax.annotate(LABELS[r], (PR_L12[r], summary[r]["d_induce"]),
-                            textcoords="offset points", xytext=(6, 4))
+        colors = {"induce": "#c0392b", "single": "#2980b9", "loo": "#27ae60"}
+        fig, ax = plt.subplots(figsize=(6, 4))
+        for name, desc, _, _ in CRITERIA:
+            ys = [summary[r]["d"][name] for r in RUNGS if r in summary]
+            ax.plot(prs, ys, "o-", color=colors[name], label=f"d*_{name}")
         ax.set_xlabel("PR входной оси (L=12)")
         ax.set_ylabel("d* конуса отказа")
-        ax.set_title("Разброс концепта (вход) -> размерность отказа (выход)")
+        ax.set_title("Разброс концепта (вход) → размерность отказа (выход)")
+        ax.legend(fontsize=8)
+        for r in RUNGS:
+            if r in summary:
+                ax.annotate(LABELS[r], (PR_L12[r], summary[r]["d"]["induce"]),
+                            textcoords="offset points", xytext=(6, 4), fontsize=8)
         fig.tight_layout()
         p = os.path.join(args.out, "pr_vs_dstar.png")
         fig.savefig(p, dpi=140)

@@ -133,6 +133,17 @@ def main():
         pb_induce = [add_vector_scores(harmless, basis[k]).mean().item()
                      for k in range(basis.shape[0])]
 
+        # leave-one-out: независимая НЕОБХОДИМОСТЬ каждой оси.
+        # аблируем весь конус БЕЗ оси k; если отказ восстанавливается (loo > full_bypass,
+        # r высокий/положительный) — ось k несёт независимый refusal-сигнал, её нельзя не
+        # вырезать => она необходима. пустой набор (d=1) = без аблации = базовый отказ.
+        full_bypass = bypass.mean().item()
+        loo_bypass = []
+        for k in range(basis.shape[0]):
+            wo = torch.cat([basis[:k], basis[k + 1:]], dim=0)
+            loo_bypass.append(ablate_subspace_scores(harmful, wo).mean().item())
+        necessity = [lb - full_bypass for lb in loo_bypass]  # >0 => sparing k возвращает отказ
+
         row = {
             "dim": d,
             "bypass_mean": bypass.mean().item(),
@@ -141,13 +152,17 @@ def main():
             "induce_marginal": induce_marg.mean().item(),
             "per_basis_bypass": pb_bypass,
             "per_basis_induce": pb_induce,
-            "per_basis_bypass_max": max(pb_bypass),   # слабейшее направление (наименее снимает отказ)
-            "per_basis_induce_min": min(pb_induce),   # слабейшее направление (наименее навязывает)
+            "per_basis_bypass_max": max(pb_bypass),   # слабейшее (наименее снимает отказ в одиночку)
+            "per_basis_induce_min": min(pb_induce),   # слабейшее (наименее навязывает)
+            "loo_bypass": loo_bypass,                 # r при аблации конуса без оси k (высокий=>k необходима)
+            "loo_bypass_min": min(loo_bypass),        # слабейшая по необходимости ось
+            "necessity_min": min(necessity),          # min по k: (loo_k - full); >0 => все оси необходимы
         }
         results.append(row)
         print(f"d={d}  bypass={row['bypass_mean']:+.2f} (ASR={row['bypass_asr']:.2f})  "
-              f"retain={row['retain_mean']:+.2f}  induce_marg={row['induce_marginal']:+.2f}  "
-              f"weakest_induce={row['per_basis_induce_min']:+.2f}")
+              f"weak_induce={row['per_basis_induce_min']:+.2f}  "
+              f"weak_single_byp={row['per_basis_bypass_max']:+.2f}  "
+              f"loo_min={row['loo_bypass_min']:+.2f} (necessity_min={row['necessity_min']:+.2f})")
 
     out_path = f"{cone_dir}/eval_test.json"
     json.dump({"rung": rung, "add_layer": add_layer, "alpha": alpha, "dims": results},
