@@ -19,6 +19,7 @@ FORK="$(cd "$ROOT/${FORK:-../geometry-of-refusal}" && pwd)"
 GPU="${GPU:-3}"
 MODEL="${MODEL:-Qwen/Qwen2.5-3B-Instruct}"
 RUNGS="${RUNGS:-theft illegal_activities malicious_use}"
+MINDIM="${MINDIM:-1}"   # >1 => resume: подсев базиса из dim_{MINDIM-1}.pt
 MAXDIM="${MAXDIM:-8}"
 
 cd "$FORK"   # rdo.py читает ./data, ./results, .env относительно cwd
@@ -27,6 +28,6 @@ for r in $RUNGS; do
   echo "=== cone sweep: $r (dim 1..$MAXDIM) ==="
   DIM_DIR="dim/$r" CUDA_VISIBLE_DEVICES="$GPU" \
     "$PY" rdo.py --train_cone --model "$MODEL" --splits "$r" \
-      --min_cone_dim 1 --max_cone_dim "$MAXDIM"
+      --min_cone_dim "$MINDIM" --max_cone_dim "$MAXDIM"
 done
 echo "готово: per-d конусы в $FORK/results/cones/<rung>/dim_<d>.pt"
