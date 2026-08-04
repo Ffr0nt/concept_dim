@@ -31,7 +31,10 @@ def main():
     ap.add_argument("--model", default="Qwen/Qwen2.5-3B-Instruct")
     ap.add_argument("--max_dim", type=int, default=8)
     ap.add_argument("--batch_size", type=int, default=16)
+    ap.add_argument("--n_samples", type=int, default=int(os.getenv("SAMPLES", "64")),
+                    help="Monte-Carlo направлений из конуса для ablation-ASR (метрика Wollschläger Fig.3-4)")
     args = ap.parse_args()
+    torch.manual_seed(21)  # сид проекта — воспроизводимость сэмплов конуса
 
     from nnsight import LanguageModel
     from scoring import projection_einops, refusal_metric
@@ -100,6 +103,24 @@ def main():
             torch.cuda.empty_cache()
         return torch.cat(out, dim=0)
 
+    def cone_sample_ablation(prompts, basis, k_samples):
+        """Метрика статьи (Wollschläger Fig.3-4): сэмплируем k направлений ИЗ конуса
+        (λ>=0, r=Σλ_i b_i, нормировано — как sample_hypersphere_gaussian+transform в rdo.py),
+        аблируем КАЖДОЕ по отдельности на harmful, возвращаем per-sample (ASR, bypass_mean).
+        Размерность конуса = где НИЖНЯЯ ГРАНИЦА ASR сэмплов ещё высока."""
+        d = basis.shape[0]
+        bn = torch.stack([(v / v.norm()) for v in basis]).to(model.dtype).to(model.device)  # [d,hidden]
+        coeffs = torch.randn(k_samples, d, device=model.device).abs()      # λ >= 0
+        coeffs = coeffs / coeffs.norm(dim=1, keepdim=True)
+        dirs = (coeffs.to(model.dtype) @ bn)                               # [k,hidden] в span конуса
+        dirs = dirs / dirs.norm(dim=1, keepdim=True)
+        asr, byp = [], []
+        for j in range(k_samples):
+            s = ablate_subspace_scores(prompts, dirs[j:j + 1])            # аблация одного сэмпла-направления
+            asr.append((s < 0).float().mean().item())
+            byp.append(s.mean().item())
+        return asr, byp
+
     def add_vector_scores(prompts, vec):
         """refusal_metric при добавлении alpha*vec на add_layer (эффект наведения отказа)."""
         v = (vec / vec.norm()).to(model.dtype).to(model.device)
@@ -144,6 +165,11 @@ def main():
             loo_bypass.append(ablate_subspace_scores(harmful, wo).mean().item())
         necessity = [lb - full_bypass for lb in loo_bypass]  # >0 => sparing k возвращает отказ
 
+        # метрика статьи: Monte-Carlo сэмплы из конуса, ablation-ASR, нижняя граница
+        s_asr, s_byp = cone_sample_ablation(harmful, basis, args.n_samples)
+        st = torch.tensor(s_asr)
+        q = lambda p: torch.quantile(st, p).item()
+
         row = {
             "dim": d,
             "bypass_mean": bypass.mean().item(),
@@ -157,12 +183,20 @@ def main():
             "loo_bypass": loo_bypass,                 # r при аблации конуса без оси k (высокий=>k необходима)
             "loo_bypass_min": min(loo_bypass),        # слабейшая по необходимости ось
             "necessity_min": min(necessity),          # min по k: (loo_k - full); >0 => все оси необходимы
+            # метрика Wollschläger (Fig.3-4): распределение ablation-ASR сэмплов конуса
+            "sample_asr_mean": st.mean().item(),
+            "sample_asr_median": q(0.5),
+            "sample_asr_p25": q(0.25),
+            "sample_asr_p05": q(0.05),                 # нижняя граница — критерий размерности
+            "sample_asr_min": st.min().item(),
+            "sample_bypass_max": max(s_byp),           # худший сэмпл (наименее снимает отказ)
+            "n_samples": args.n_samples,
         }
         results.append(row)
-        print(f"d={d}  bypass={row['bypass_mean']:+.2f} (ASR={row['bypass_asr']:.2f})  "
-              f"weak_induce={row['per_basis_induce_min']:+.2f}  "
-              f"weak_single_byp={row['per_basis_bypass_max']:+.2f}  "
-              f"loo_min={row['loo_bypass_min']:+.2f} (necessity_min={row['necessity_min']:+.2f})")
+        print(f"d={d}  full_bypass={row['bypass_mean']:+.2f}  "
+              f"sample_ASR: mean={row['sample_asr_mean']:.2f} p05={row['sample_asr_p05']:.2f} "
+              f"min={row['sample_asr_min']:.2f}  |  weak_induce={row['per_basis_induce_min']:+.2f} "
+              f"loo_min={row['loo_bypass_min']:+.2f}")
 
     out_path = f"{cone_dir}/eval_test.json"
     json.dump({"rung": rung, "add_layer": add_layer, "alpha": alpha, "dims": results},

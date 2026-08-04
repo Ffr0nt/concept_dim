@@ -55,6 +55,12 @@ def d_star_loo(dims):
     return _prefix(dims, lambda r: r.get("loo_bypass_min", -1.0) > 0)
 
 
+def d_star_sample(dims, tau=0.8):
+    """метрика Wollschläger (Fig.3-4): размерность конуса = наибольшая d, при которой
+    НИЖНЯЯ ГРАНИЦА ablation-ASR сэмплов конуса (p05) ещё >= tau. Плато́ = исчерпание конуса."""
+    return _prefix(dims, lambda r: r.get("sample_asr_p05", 0.0) >= tau)
+
+
 def d_star_knee(dims):
     """kneedle по bypass_asr(d): точка макс. расстояния до хорды между концами."""
     xs = [r["dim"] for r in dims]
@@ -74,6 +80,7 @@ def d_star_knee(dims):
 
 
 CRITERIA = [
+    ("sample", "СТАТЬЯ: ablation-ASR сэмплов, нижняя граница p05>=0.8", d_star_sample, "sample_asr_p05"),
     ("induce", "достаточность (add→отказ)", d_star_induce, "per_basis_induce_min"),
     ("single", "необходимость одиночн. (ablate 1→нет отказа)", d_star_single, "per_basis_bypass_max"),
     ("loo", "необходимость LOO (ablate all−k→отказ)", d_star_loo, "loo_bypass_min"),
@@ -130,18 +137,18 @@ def main():
         import matplotlib.pyplot as plt
         os.makedirs(args.out, exist_ok=True)
         prs = [PR_L12[r] for r in RUNGS if r in summary]
-        colors = {"induce": "#c0392b", "single": "#2980b9", "loo": "#27ae60"}
+        colors = {"sample": "#8e44ad", "induce": "#c0392b", "single": "#2980b9", "loo": "#27ae60"}
         fig, ax = plt.subplots(figsize=(6, 4))
         for name, desc, _, _ in CRITERIA:
             ys = [summary[r]["d"][name] for r in RUNGS if r in summary]
-            ax.plot(prs, ys, "o-", color=colors[name], label=f"d*_{name}")
+            ax.plot(prs, ys, "o-", color=colors.get(name), label=f"d*_{name}")
         ax.set_xlabel("PR входной оси (L=12)")
         ax.set_ylabel("d* конуса отказа")
         ax.set_title("Разброс концепта (вход) → размерность отказа (выход)")
         ax.legend(fontsize=8)
         for r in RUNGS:
             if r in summary:
-                ax.annotate(LABELS[r], (PR_L12[r], summary[r]["d"]["induce"]),
+                ax.annotate(LABELS[r], (PR_L12[r], summary[r]["d"]["sample"]),
                             textcoords="offset points", xytext=(6, 4), fontsize=8)
         fig.tight_layout()
         p = os.path.join(args.out, "pr_vs_dstar.png")
