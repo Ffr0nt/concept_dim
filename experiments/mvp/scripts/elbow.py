@@ -130,6 +130,20 @@ def main():
             mono = vals[0] <= vals[1] <= vals[2] and vals[0] < vals[2]
             print(f"  {name:<7}: {vals}  {'✅ монотонно растёт' if mono else '✗ не поддерживает лестницу'}")
 
+    # непрерывный показатель: среднее p05 по всем d (площадь под нижней границей ablation-ASR)
+    print("\n=== непрерывно: mean p05 ablation-ASR по всем d (робастность конуса) ===")
+    mp = []
+    for r in RUNGS:
+        if r in summary:
+            vs = [x.get("sample_asr_p05", 0.0) for x in summary[r]["dims"]]
+            m = sum(vs) / len(vs)
+            mp.append(m)
+            print(f"  {LABELS[r]:<8} PR={PR_L12[r]:.2f}  mean_p05={m:.3f}")
+    if len(mp) == 3:
+        mono = mp[0] < mp[1] < mp[2]
+        print(f"  лестница mean_p05: {[round(x,3) for x in mp]}  "
+              f"{'✅ строго монотонно растёт' if mono else '✗'}")
+
     # график: три критерия vs PR
     try:
         import matplotlib
