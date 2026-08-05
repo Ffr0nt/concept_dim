@@ -14,7 +14,7 @@ set -euo pipefail
 export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-SEEDS="${SEEDS:-21 7 13}"
+SEEDS="${SEEDS:-21 3 7}"   # предпочтительные сиды проекта (убыв.): 21 3 7 0
 GPU="${GPU:-3}"
 RUNGS="${RUNGS:-theft illegal_activities malicious_use}"
 MAXDIM="${MAXDIM:-8}"
