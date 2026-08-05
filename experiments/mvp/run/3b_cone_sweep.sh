@@ -26,6 +26,7 @@ MINDIM="${MINDIM:-1}"   # >1 => resume: подсев базиса из dim_{MIND
 MAXDIM="${MAXDIM:-8}"
 export BEST_OF_K="${BEST_OF_K:-1}"   # rdo.py читает из env
 export SEED="${SEED:-21}"
+export CONE_TAG="${CONE_TAG:-}"      # namespacing конусов: cones/<rung>/<CONE_TAG>/ (мультисид)
 NSAMPLE="${NSAMPLE:-8}"
 
 cd "$FORK"   # rdo.py читает ./data, ./results, .env относительно cwd

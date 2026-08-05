@@ -133,7 +133,8 @@ def main():
             torch.cuda.empty_cache()
         return torch.cat(out, dim=0)
 
-    cone_dir = f"{save_dir}/cones/{rung}"
+    cone_dir = os.path.join(save_dir, "cones", rung, os.getenv("CONE_TAG", ""))
+    print(f"cone_dir={cone_dir}")
     results = []
     for d in range(1, args.max_dim + 1):
         f = f"{cone_dir}/dim_{d}.pt"

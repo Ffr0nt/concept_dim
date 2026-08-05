@@ -24,6 +24,7 @@ MAXDIM="${MAXDIM:-8}"
 cd "$FORK"   # data/, results/, .env — относительно cwd
 export SAVE_DIR="./results"
 export HUGGINGFACE_CACHE_DIR="/home/jovyan/.cache/huggingface/hub"
+export CONE_TAG="${CONE_TAG:-}"      # читать конусы из cones/<rung>/<CONE_TAG>/ (мультисид)
 echo "модель=$MODEL  GPU=$GPU  MAXDIM=$MAXDIM  fork=$FORK"
 for r in $RUNGS; do
   echo "=== eval cones: $r ==="
