@@ -188,7 +188,10 @@ def main():
             "sample_asr_median": q(0.5),
             "sample_asr_p25": q(0.25),
             "sample_asr_p05": q(0.05),                 # нижняя граница — критерий размерности
+            "sample_asr_p75": q(0.75),
+            "sample_asr_max": st.max().item(),
             "sample_asr_min": st.min().item(),
+            "sample_asr_all": [round(v, 4) for v in s_asr],  # полная выборка для box-плота
             "sample_bypass_max": max(s_byp),           # худший сэмпл (наименее снимает отказ)
             "n_samples": args.n_samples,
         }
