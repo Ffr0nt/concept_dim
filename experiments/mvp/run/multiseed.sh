@@ -8,7 +8,7 @@
 #   SEEDS="21 7 13" GPU=2 bash experiments/mvp/run/multiseed.sh
 #   SEEDS="21 7 13 42 100" RUNGS="theft" MAXDIM=8 SAMPLES=256 GPU=2 bash experiments/mvp/run/multiseed.sh
 #
-# Env: SEEDS ("21 7 13"), GPU (3), RUNGS (все три), MAXDIM (8), SAMPLES (256),
+# Env: SEEDS ("21 7 13"), GPU (3), RUNGS (все три), MAXDIM (5), SAMPLES (256),
 #      NSAMPLE (обуч. сэмплы конуса, 8), MODEL.
 set -euo pipefail
 export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
@@ -17,7 +17,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 SEEDS="${SEEDS:-21 3 7}"   # предпочтительные сиды проекта (убыв.): 21 3 7 0
 GPU="${GPU:-3}"
 RUNGS="${RUNGS:-theft illegal_activities malicious_use}"
-MAXDIM="${MAXDIM:-8}"
+MAXDIM="${MAXDIM:-5}"
 SAMPLES="${SAMPLES:-256}"
 NSAMPLE="${NSAMPLE:-8}"
 MODEL="${MODEL:-Qwen/Qwen2.5-3B-Instruct}"

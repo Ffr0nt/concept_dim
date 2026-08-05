@@ -9,7 +9,7 @@
 #   RUNGS="theft" MAXDIM=3 bash experiments/mvp/run/3b_cone_sweep.sh   # быстрая проверка
 #   BEST_OF_K=3 NSAMPLE=32 bash experiments/mvp/run/3b_cone_sweep.sh   # стабилизация оценки
 #
-# Env: GPU (3), MODEL, RUNGS (все три), MINDIM (1), MAXDIM (8), FORK,
+# Env: GPU (3), MODEL, RUNGS (все три), MINDIM (1), MAXDIM (5), FORK,
 #      BEST_OF_K (1) — K конусов на размерность, берём лучший по лоссу (убирает «пилу» по d),
 #      NSAMPLE (8) — сэмплов внутренности конуса при обучении (L_sample), SEED (21).
 set -euo pipefail
@@ -23,7 +23,7 @@ GPU="${GPU:-3}"
 MODEL="${MODEL:-Qwen/Qwen2.5-3B-Instruct}"
 RUNGS="${RUNGS:-theft illegal_activities malicious_use}"
 MINDIM="${MINDIM:-1}"   # >1 => resume: подсев базиса из dim_{MINDIM-1}.pt
-MAXDIM="${MAXDIM:-8}"
+MAXDIM="${MAXDIM:-5}"
 export BEST_OF_K="${BEST_OF_K:-1}"   # rdo.py читает из env
 export SEED="${SEED:-21}"
 export CONE_TAG="${CONE_TAG:-}"      # namespacing конусов: cones/<rung>/<CONE_TAG>/ (мультисид)
