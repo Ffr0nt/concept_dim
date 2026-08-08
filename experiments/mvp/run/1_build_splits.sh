@@ -5,9 +5,10 @@
 # Тянет SALAD с HF (кэш переиспользуется). Запускать НА СЕРВЕРЕ.
 #
 # Использование:
-#   bash experiments/mvp/run/1_build_splits.sh
+#   bash experiments/mvp/run/1_build_splits.sh                 # все ступени
+#   ONLY="all" bash experiments/mvp/run/1_build_splits.sh      # только новую ступень (безопасно)
 #
-# Env (опц.): SEED (21), FORK (../geometry-of-refusal), HARMLESS_SRC.
+# Env (опц.): SEED (21), FORK (../geometry-of-refusal), HARMLESS_SRC, ONLY ("all"/"theft ...").
 set -euo pipefail
 export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
 
@@ -19,6 +20,7 @@ export HF_HOME="${HF_HOME:-/home/jovyan/.cache/huggingface}"
 
 EXTRA=()
 [ -n "${HARMLESS_SRC:-}" ] && EXTRA+=(--harmless-src "$HARMLESS_SRC")
+[ -n "${ONLY:-}" ] && EXTRA+=(--only "$ONLY")
 
 uv run --with datasets --with pandas python experiments/mvp/scripts/build_splits.py \
   --seed "$SEED" --fork "$FORK" "${EXTRA[@]}"

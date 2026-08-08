@@ -69,7 +69,15 @@ def main():
     ap.add_argument("--seed", type=int, default=21)
     ap.add_argument("--harmless-src", default=None,
                     help="источник benign (по умолчанию data/saladbench_splits/harmless_train.json форка)")
+    ap.add_argument("--only", default=None,
+                    help="строить только эти ступени (через пробел/запятую); по умолчанию все")
     args = ap.parse_args()
+
+    only = None
+    if args.only:
+        only = set(args.only.replace(",", " ").split())
+        unknown = only - set(RUNGS)
+        assert not unknown, f"неизвестные ступени в --only: {unknown}; доступны: {list(RUNGS)}"
 
     fork = os.path.abspath(args.fork)
     data_dir = os.path.join(fork, "data")
@@ -95,6 +103,8 @@ def main():
     df = load_dataset("OpenSafetyLab/Salad-Data", name="base_set")["train"].to_pandas()
 
     for name, (col, val) in RUNGS.items():
+        if only is not None and name not in only:
+            continue
         # col=None => берём ВЕСЬ датасет; stratified_sample по 3-category тогда даёт
         # каждый лист пропорционально его доле во всём SALAD (баланс = доля в общем объёме)
         pool = df if col is None else df[df[col] == val]
