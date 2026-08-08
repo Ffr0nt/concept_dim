@@ -1,4 +1,4 @@
 rung,d_star_sample_mean,d_star_sample_std,d_star_induce_mean,d_star_induce_std,d_star_single_mean,d_star_single_std,d_star_loo_mean,d_star_loo_std
 theft,2.667,0.943,1.667,0.471,2.333,0.471,1,0.0
 illegal_activities,3.333,0.471,2,0.0,4,0.0,1,0.0
-malicious_use,1.333,0.471,5,0.0,2.333,0.471,1,0.0
+malicious_use,1.333,0.471,7.333,0.471,2.333,0.471,1,0.0
