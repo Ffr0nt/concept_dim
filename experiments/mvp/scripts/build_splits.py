@@ -1,7 +1,9 @@
 """Этап 1 — сборка per-rung сплитов SALAD для MVP concept-dim.
 
-Для каждой ступени вложенной лестницы (Theft ⊂ Illegal Activities ⊂ Malicious Use)
+Для каждой ступени вложенной лестницы (Theft ⊂ Illegal Activities ⊂ Malicious Use ⊂ all)
 создаёт в форке geometry-of-refusal каталог data/<rung>_splits/ с файлами:
+Ступень "all" — весь SALAD (без фильтра): стратификация по 3-category даёт каждый лист
+пропорционально его доле во ВСЁМ датасете (баланс = доля листа в общем объёме).
     harmful_{train,val,test}.json   — сэмплы SALAD этой категории
     harmless_{train,val,test}.json  — общий benign-набор (одинаков для всех ступеней)
 
@@ -26,11 +28,12 @@ import os
 import pandas as pd
 from datasets import load_dataset
 
-# ступень -> (колонка таксономии, значение)
+# ступень -> (колонка таксономии, значение); (None, None) => без фильтра, ВЕСЬ датасет
 RUNGS = {
     "theft":              ("3-category", "O57: Theft"),
     "illegal_activities": ("2-category", "O14: Illegal Activities"),
     "malicious_use":      ("1-category", "O5: Malicious Use"),
+    "all":                (None, None),   # весь SALAD (6 доменов) — самая широкая ступень
 }
 SIZES = {"train": 900, "val": 128, "test": 128}
 SEED_OFFSET = {"train": 0, "val": 1, "test": 2}
@@ -92,7 +95,9 @@ def main():
     df = load_dataset("OpenSafetyLab/Salad-Data", name="base_set")["train"].to_pandas()
 
     for name, (col, val) in RUNGS.items():
-        pool = df[df[col] == val]
+        # col=None => берём ВЕСЬ датасет; stratified_sample по 3-category тогда даёт
+        # каждый лист пропорционально его доле во всём SALAD (баланс = доля в общем объёме)
+        pool = df if col is None else df[df[col] == val]
         out_dir = os.path.join(data_dir, f"{name}_splits")
         os.makedirs(out_dir, exist_ok=True)
         counts = {}
