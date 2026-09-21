@@ -12,7 +12,9 @@ read-компонента (коррелирует с вредностью, но 
 Метод. Для каждого слоя берётся активация последнего токена, проецируется на направление —
 получается один скаляр на промпт. Качество детектора меряется двумя способами:
   AUROC   ранговая мера на TEST (128+128), порог не нужен; знак направления произволен,
-          поэтому берётся max(auc, 1-auc);
+          поэтому берётся max(auc, 1-auc). Репортится на ФИКСИРОВАННЫХ слоях (начальный,
+          средний, add_layer ступени, последний): выбор лучшего из 36 слоёв завышает оценку
+          отбором, особенно у слабых направлений (случайное так берёт 0.866 вместо ~0.6);
   acc     точность на TEST с порогом, подобранным на TRAIN (256+256) — честный held-out.
 Плюс d Коэна на train как мера разделимости.
 
@@ -93,8 +95,9 @@ def main():
     # --- направления ---
     ax = os.path.join(save_dir, "common_axis")
     unit = lambda v: v / v.norm()
-    d = unit(torch.load(f"{save_dir}/{os.getenv('DIM_DIR')}/{model_id}/direction.pt",
-                        map_location="cpu").float())
+    dim_path = f"{save_dir}/{os.getenv('DIM_DIR')}/{model_id}"
+    d = unit(torch.load(f"{dim_path}/direction.pt", map_location="cpu").float())
+    add_layer = int(json.load(open(f"{dim_path}/direction_metadata.json"))["layer"])
     W_cone = torch.load(os.path.join(ax, "global", "pooled.pt"), map_location="cpu")["W"].float()
     mp = os.path.join(ax, "global", "mixed_native_balanced.pt")
     W_mixed = torch.load(mp, map_location="cpu")["W"].float() if os.path.exists(mp) else None
@@ -144,13 +147,32 @@ def main():
         b = best_layer[n]
         print(f"{n:16s} лучший слой {b['layer']:2d}: AUROC={b['auroc']:.3f} acc={b['acc_test']:.3f} d={b['cohen_d']:.2f}")
 
+    fixed = [("начальный", 0), ("средний", n_layers // 2),
+             ("add_layer", add_layer), ("последний", n_layers - 1)]
+    fixed = [(t, l) for t, l in fixed if 0 <= l < n_layers]
+    cell = lambda l, n, k: [r for r in rows if r["layer"] == l and r["direction"] == n][0][k]
+
     L = [f"# §8. Read против write: детектирует ли остаток DIM вредность? Ступень `{rung}`", "",
          f"Модель {model_id}. Проекция активации последнего токена на направление; "
          f"порог подобран на train ({len(tr_pos)}+{len(tr_neg)}), точность и AUROC — "
          f"на test ({len(te_pos)}+{len(te_neg)}).",
          "Знак направления произволен, поэтому AUROC берётся как max(auc, 1−auc).",
          "`meandiff_layer` — разность средних, посчитанная на train ЭТОГО слоя: потолок слоя.", "",
-         "## Лучший слой каждого направления", "",
+         "## Фиксированные слои (основная таблица)", "",
+         "Слои зафиксированы заранее, без отбора: выбор лучшего из "
+         f"{n_layers} завышает оценку у слабых направлений.", "",
+         "AUROC на test:", "",
+         "| направление | " + " | ".join(f"{t} ({l})" for t, l in fixed) + " |",
+         "|" + "---|" * (len(fixed) + 1)]
+    for n in names:
+        L.append(f"| {n} | " + " | ".join(f"{cell(l, n, 'auroc'):.3f}" for _, l in fixed) + " |")
+    L += ["", "Точность на test (порог с train):", "",
+          "| направление | " + " | ".join(f"{t} ({l})" for t, l in fixed) + " |",
+          "|" + "---|" * (len(fixed) + 1)]
+    for n in names:
+        L.append(f"| {n} | " + " | ".join(f"{cell(l, n, 'acc_test'):.3f}" for _, l in fixed) + " |")
+    L += ["",
+         "## Лучший слой каждого направления (для справки; оценка завышена отбором)", "",
          "| направление | слой | AUROC | acc (test) | d Коэна |", "|---|---|---|---|---|"]
     for n in names:
         b = best_layer[n]
