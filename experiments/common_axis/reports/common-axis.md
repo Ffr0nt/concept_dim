@@ -112,3 +112,5 @@ alpha_j = ||B_j w_1||, lam_1 = mean_j alpha_j². nu — средняя по си
 
 Точка сравнения с u_1^DIM и старт power-iteration — (-4, 22) (native-точка ступени). Между ступенями сравнимы только колонки общих точек.
 
+Оси сохранены: `/home/jovyan/f.zakharov/geometry-of-refusal/results/common_axis/<ступень>/dim_<k>.pt` (ключ `W`, [m, hidden], строки — оси по убыванию lam; m = min(N·k, 16)).
+
