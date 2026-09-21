@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Шаг 1 — спектр среднего проектора по сидам: есть ли общая ось у конусов одной ступени.
 # CPU, GPU НЕ нужен, модель не грузится: читает results/cones/<rung>/seed_<s>/dim_<d>.pt
-# и results/dim/<rung>/<model>/. scipy не нужен. Пишет reports/common-axis.md.
+# и results/dim/<rung>/<model>/. scipy не нужен. Пишет reports/common-axis.md (числа) и
+# results/common_axis/<rung>/dim_<k>.pt (сами оси w_k — их аблирует GPU-часть).
 #
 # Использование:
 #   bash experiments/common_axis/run/1_common_axis.sh

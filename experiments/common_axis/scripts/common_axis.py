@@ -36,6 +36,11 @@ w_k = M^T u_k / ||M^T u_k||, где u_k — собственный вектор 
   power-iteration из DIM: v <- P v со старта v_0 = DIM. Остаётся (cos(v_inf, v_0) ~ 1)
     или уходит к w_1 — read-инвариант против write-инварианта.
 
+АРТЕФАКТЫ. Сами оси w_k сохраняются в <base>/common_axis/<rung>/dim_<k>.pt (ключ "W",
+[m, hidden] float32, m = min(N*k, 16), строки — оси по убыванию lam) вместе со спектром и
+per-seed величинами. Без этого §6 нечего аблировать: отчёт содержит только числа. Каталог
+results/ форка в git не хранится (.gitignore:254), как cones/ и dim/.
+
 Конфаундер общей инициализации СЮДА НЕ ВХОДИТ по построению: сид старта в rdo.py:1126
 не зависит от ступени, поэтому общий старт есть у разных СТУПЕНЕЙ при одном сиде, а здесь
 усреднение идёт ровно по сидам. Для P между ступенями (§4 заметки) нужен отдельный нуль
@@ -154,11 +159,14 @@ def main():
     ap.add_argument("--n_null", type=int, default=500)
     ap.add_argument("--seed", type=int, default=21)
     ap.add_argument("--out", default=None)
+    ap.add_argument("--save_dir", default=None,
+                    help="куда класть оси w_k (по умолчанию <base>/common_axis); --save_dir '' отключает")
     ap.add_argument("--threads", type=int, default=int(os.getenv("THREADS", "8")),
                     help="потоков torch; машина общая, матрицы маленькие — см. докстринг")
     args = ap.parse_args()
 
     torch.set_num_threads(max(1, args.threads))
+    save_dir = os.path.join(args.base, "common_axis") if args.save_dir is None else args.save_dir
 
     gen = torch.Generator().manual_seed(args.seed)
     lines = []
@@ -230,6 +238,22 @@ def main():
                  + f" | {sum(nus)/len(nus):.3f} | {sum(nus_m)/len(nus_m):.3f} |")
             keep[k] = (lam, w1, M, frames)
 
+            if save_dir:
+                m = min(W.shape[1], 16)
+                Wm = W[:, :m].T.clone()               # [m, hidden], строки — оси
+                Wm[0] = w1                            # знак w_1 уже зафиксирован по ортанту
+                d = os.path.join(save_dir, rung)
+                os.makedirs(d, exist_ok=True)
+                torch.save({
+                    "rung": rung, "k": k, "seeds": list(SEEDS), "hidden": hidden,
+                    "W": Wm.float(), "lam": lam[:m].float(),
+                    "lam_null_mean": nm.float(), "lam_null_p95": np95.float(),
+                    "n_null": args.n_null, "floor": 1.0 / len(frames),
+                    "alphas": torch.tensor(alphas), "nu_plus": torch.tensor(nus),
+                    "cone_files": [os.path.join("cones", rung, f"seed_{s}", f"dim_{k}.pt")
+                                   for s in SEEDS],
+                }, os.path.join(d, f"dim_{k}.pt"))
+
         emit()
         emit(f"alpha_j = ||B_j w_1||, lam_1 = mean_j alpha_j². nu — средняя по сидам доля "
              f"in-span энергии w_1 в минус-ортанте (0 = ось внутри конуса, ~0.5 = ортант случаен; "
@@ -271,6 +295,11 @@ def main():
             emit(f"Точка сравнения с u_1^DIM и старт power-iteration — {SEL.get(rung)} "
                  f"(native-точка ступени). Между ступенями сравнимы только колонки общих точек.")
             emit()
+
+    if save_dir:
+        emit(f"Оси сохранены: `{save_dir}/<ступень>/dim_<k>.pt` "
+             f"(ключ `W`, [m, hidden], строки — оси по убыванию lam; m = min(N·k, 16)).")
+        emit()
 
     if args.out:
         os.makedirs(os.path.dirname(args.out), exist_ok=True)
