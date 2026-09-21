@@ -5,10 +5,13 @@ write-вопрос: ДОСТАТОЧНО ли его. Добавляем h <- h 
 слое и смотрим, начинает ли модель отказывать. Если да — ось кодирует отказ; если нет, а
 аблация при этом работала, — она коррелят «вредности» промпта, а не медиатор отказа.
 
-СЛОЙ. Берётся пик проекции: для каждого слоя считается средняя |<h_last, w>| на harmful
-минус на harmless, выбирается argmax. Профиль печатается в отчёт — если пик размазан,
-вывод о слое слабый. Вмешательство ставится на вход блока этого слоя (как add в rdo.py и
-add_vector_scores в eval_cones.py).
+СЛОЙ. По умолчанию — add_layer своей ступени (та же точка, что у DIM в
+direction_metadata.json и в eval_cones.py), чтобы наведение было сопоставимо с протоколом
+статьи. Профиль проекции по слоям всё равно считается и печатается, НО в нормированном
+виде: cos(h_last, w) = <h,w>/||h||. Сырая |<h,w>| для выбора слоя непригодна — она растёт
+с глубиной вместе с нормой активаций, и её argmax всегда упирается в последние слои
+(на ступени `all` это давало слой 35 из 36, где вмешательство уже ни на что не влияет).
+Переопределяется через --layer.
 
 МАСШТАБ alpha. Единица — норма DIM-вектора ступени ||r||, как в eval_cones.py (там
 add_layer-добавление идёт с alpha = ||DIM||). Свип задаётся в кратных этой единицы, так что
@@ -39,7 +42,8 @@ def main():
     ap.add_argument("--batch_size", type=int, default=16)
     ap.add_argument("--scales", type=float, nargs="+", default=[0.5, 1.0, 2.0, 4.0],
                     help="alpha в кратных ||DIM||")
-    ap.add_argument("--layer", type=int, default=None, help="слой вмешательства (по умолчанию пик проекции)")
+    ap.add_argument("--layer", type=int, default=None,
+                    help="слой вмешательства (по умолчанию add_layer ступени из метаданных DIM)")
     ap.add_argument("--seed", type=int, default=21)
     ap.add_argument("--out", default=None)
     ap.add_argument("--json_out", default=None)
@@ -74,8 +78,9 @@ def main():
 
     # --- направления ---
     ax = os.path.join(save_dir, "common_axis")
-    dim_raw = torch.load(f"{save_dir}/{os.getenv('DIM_DIR')}/{model_id}/direction.pt",
-                         map_location="cpu").float()
+    dim_path = f"{save_dir}/{os.getenv('DIM_DIR')}/{model_id}"
+    dim_raw = torch.load(f"{dim_path}/direction.pt", map_location="cpu").float()
+    add_layer = int(json.load(open(f"{dim_path}/direction_metadata.json"))["layer"])
     unit = lambda v: v / v.norm()
     dim_norm = float(dim_raw.norm())
     d = unit(dim_raw)
@@ -95,12 +100,15 @@ def main():
 
     # --- профиль проекции по слоям: где ось «живёт» ---
     def proj_profile(prompts, v):
+        """Нормированная проекция cos(h_last, w) по слоям — без нормировки argmax всегда
+        уходит в последние слои вслед за ростом ||h||."""
         vv = v.to(model.dtype).to(model.device)
         acc = None
         for i in range(0, len(prompts), bs):
             with model.trace(prompts[i:i + bs]):
-                per = [(layer.output[0][:, -1] @ vv).save() for layer in model.model.layers]
-            vals = torch.tensor([float(p.value.float().abs().mean()) for p in per])
+                per = [(layer.output[0][:, -1] @ vv / layer.output[0][:, -1].norm(dim=-1)).save()
+                       for layer in model.model.layers]
+            vals = torch.tensor([float(p.value.float().mean()) for p in per])
             acc = vals if acc is None else acc + vals
             torch.cuda.empty_cache()
         return acc / max(1, (len(prompts) + bs - 1) // bs)
@@ -108,9 +116,9 @@ def main():
     w1 = DIRS["w_cone"]
     pf_harm, pf_less = proj_profile(harmful, w1), proj_profile(harmless, w1)
     gap = pf_harm - pf_less
-    layer = args.layer if args.layer is not None else int(gap.argmax())
-    print(f"пик проекции w_cone: слой {int(gap.argmax())} (разрыв {float(gap.max()):.3f}); "
-          f"вмешательство в слой {layer}")
+    layer = args.layer if args.layer is not None else add_layer
+    print(f"add_layer ступени = {add_layer}; пик cos-разрыва = слой {int(gap.argmax())} "
+          f"({float(gap.max()):+.3f}); вмешательство в слой {layer}")
 
     # --- прогоны ---
     def run(prompts, add=None, abl=None, want="metric"):
@@ -174,7 +182,8 @@ def main():
     cr_rows = [r for r in rows if r["block"] == "cross"]
     L = [f"# §7. Наведение отказа: ось — refusal или harmfulness? Ступень `{rung}`", "",
          f"Модель {model_id}; harmless_test = {len(harmless)}. Добавление h ← h + α·w на вход "
-         f"блока слоя **{layer}** (пик разрыва проекции harmful−harmless).",
+         f"блока слоя **{layer}** (add_layer ступени, как в eval_cones.py; "
+         f"пик cos-разрыва harmful−harmless — слой {int(gap.argmax())}).",
          f"Единица α = ‖DIM‖ = {dim_norm:.3f}, как в eval_cones.py.",
          f"Без вмешательства: refusal_rate = {base_rr:.3f}, metric_mean = "
          f"{float(base_m.mean()):+.3f}.", "",
@@ -188,7 +197,7 @@ def main():
     for r in cr_rows:
         L.append(f"| {r['induce']} | {r['ablate']} | **{r['refusal_rate']:.3f}** | "
                  f"{r['metric_mean']:+.3f} |")
-    L += ["", "## Профиль проекции по слоям (w_cone)", "",
+    L += ["", "## Профиль нормированной проекции cos(h, w_cone) по слоям", "",
           "| слой | harmful | harmless | разрыв |", "|---|---|---|---|"]
     for i in range(len(pf_harm)):
         L.append(f"| {i} | {float(pf_harm[i]):.3f} | {float(pf_less[i]):.3f} | "
