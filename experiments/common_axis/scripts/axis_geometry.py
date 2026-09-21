@@ -1,4 +1,4 @@
-"""§8 — геометрия общей оси относительно DIM: масштаб сигнала, дисперсия, что стирается. CPU.
+"""§9 — геометрия общей оси относительно DIM: масштаб сигнала, дисперсия, что стирается. CPU.
 
 Шаги 4-5 показали ФУНКЦИОНАЛЬНУЮ асимметрию (ось снимает отказ дешевле DIM, остаток DIM
 инертен). Здесь — геометрическая причина: чем ось отличается от DIM как вектор в residual
@@ -29,6 +29,10 @@ stream. Нормы самих направлений сравнивать неч
      аблация h <- h - a (v^T h) v;
    - Var(p)/(tr Sigma / hidden) — доля дисперсии на направлении против изотропного нуля:
      сидит ли DIM на высокодисперсной оси (ковариационный тест).
+   Read-сторона пересекается с §8 (read_probe.py, AUROC/точность детектора): там она
+   мерится как качество классификатора, здесь — как d' и уровень проекции, потому что
+   нужна та же шкала, в которой считается удаляемая энергия.
+
    Сумма E[p^2] по ВСЕМ слоям и всем трём точкам вмешательства (вход блока, выход attn,
    выход mlp) — прямая мера «сколько сигнала стирается», и её сверяем с измеренным KL_ret
    из ablation-<rung>.json: превращает «ось дешевле по KL» из наблюдения в механизм.
@@ -38,8 +42,8 @@ stream. Нормы самих направлений сравнивать неч
 (GPU, без генерации), а не «считается на уже сохранённых активациях».
 
 Запуск:
-  bash experiments/common_axis/run/7_axis_geometry.sh              # static, CPU
-  STAGE=all GPU=0 bash .../7_axis_geometry.sh                     # + кэш и acts
+  bash experiments/common_axis/run/8_axis_geometry.sh              # static, CPU
+  STAGE=all GPU=0 bash .../8_axis_geometry.sh                     # + кэш и acts
 """
 import argparse
 import json
@@ -114,7 +118,7 @@ def stage_static(args, emit):
     w1 = W_cone[0]
     wm = W_mixed[0] if W_mixed is not None else None
 
-    emit("# §8. Геометрия общей оси относительно DIM (статическая часть)")
+    emit("# §9. Геометрия общей оси относительно DIM (статическая часть)")
     emit()
     emit(f"Популяция — те же {N} конусов, что у pooled-оси шага 2 "
          f"(k_map {dict(pooled['k_map'])}, сиды {SEEDS}); hidden = {hidden}, "
@@ -274,7 +278,7 @@ def stage_acts(args, emit):
     def st(setname):
         return C["sets"][setname]
 
-    emit(f"# §8 (acts). Проекции активаций: ось против DIM — ступень `{args.rung}`")
+    emit(f"# §9 (acts). Проекции активаций: ось против DIM — ступень `{args.rung}`")
     emit()
     emit(f"Модель {C['model']}, harmful_test = {st('harmful')['n_prompts']}, "
          f"harmless_test = {st('harmless')['n_prompts']}, слоёв {L}, "
