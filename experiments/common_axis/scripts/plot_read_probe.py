@@ -23,7 +23,7 @@ INK, INK2, INK3 = "#0b0b0b", "#52514e", "#8a8985"
 SERIES = [
     ("dim", "#2a78d6", "DIM целиком"),
     ("dim_perp_cone", "#eb6834", "остаток DIM (read)"),
-    ("cone_perp_dim", "#1baf7a", "ось без DIM (write)"),
+    ("cone_perp_dim", "#1baf7a", "компонента без DIM (write)"),
 ]
 REFS = [("meandiff_layer", "потолок слоя", (0, (5, 3))),
         ("rand", "случайное", (0, (1, 2)))]
