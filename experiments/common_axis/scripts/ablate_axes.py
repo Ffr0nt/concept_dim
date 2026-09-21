@@ -46,6 +46,8 @@ def main():
     ap.add_argument("--max_m", type=int, default=4, help="до какого m делать свип topm")
     ap.add_argument("--cone_k", type=int, default=None, help="k полного репера (по умолчанию из оси ступени)")
     ap.add_argument("--seed", type=int, default=21)
+    ap.add_argument("--residual", action="store_true",
+                    help="режим остатков: DIM минус общая компонента и обратный контроль")
     ap.add_argument("--out", default=None, help="markdown-отчёт")
     ap.add_argument("--json_out", default=None, help="сырые числа для графиков")
     args = ap.parse_args()
@@ -118,14 +120,44 @@ def main():
     cone_full = torch.load(cone_p, map_location="cpu")["vectors"].float() \
         if os.path.exists(cone_p) else None
 
-    dirs = [("w_cone", W_cone[:1]), ("dim", dim_vec.unsqueeze(0))]
-    if W_mixed is not None:
-        dirs.insert(1, ("w_mixed", W_mixed[:1]))
-    dirs += rands
-    dirs += [(f"topm_{m}", W_cone[:m]) for m in range(2, args.max_m + 1)]
-    if cone_full is not None:
-        dirs.append((f"cone_full_k{cone_k}", cone_full))
+    def unit(v):
+        return v / v.norm()
+
+    geom = []          # строки для шапки отчёта в режиме остатков
+    if args.residual:
+        # Остаток DIM после вычитания общей компоненты: несёт ли он ещё отказ?
+        # И обратный контроль: работает ли ось, если убрать из неё всё DIM-овское.
+        d = dim_vec
+        dirs = [("dim", d.unsqueeze(0)), ("w_cone", W_cone[:1])]
+        if W_mixed is not None:
+            dirs.append(("w_mixed", W_mixed[:1]))
+        for nm, W in (("cone", W_cone), ("mixed", W_mixed)):
+            if W is None:
+                continue
+            w = W[0]
+            r = unit(d - (d @ w) * w)
+            dirs.append((f"dim_perp_{nm}", r.unsqueeze(0)))
+            geom.append((f"dim_perp_{nm}", float((d @ w) ** 2), float(abs(r @ d))))
+            b = unit(w - (w @ d) * d)
+            dirs.append((f"{nm}_perp_dim", b.unsqueeze(0)))
+            geom.append((f"{nm}_perp_dim", float((d @ w) ** 2), float(abs(b @ w))))
+        m3 = min(3, W_cone.shape[0])
+        P3 = W_cone[:m3]
+        r3 = unit(d - P3.T @ (P3 @ d))
+        dirs.append((f"dim_perp_top{m3}", r3.unsqueeze(0)))
+        geom.append((f"dim_perp_top{m3}", float(((P3 @ d) ** 2).sum()), float(abs(r3 @ d))))
+        dirs += rands[:1]
+    else:
+        dirs = [("w_cone", W_cone[:1]), ("dim", dim_vec.unsqueeze(0))]
+        if W_mixed is not None:
+            dirs.insert(1, ("w_mixed", W_mixed[:1]))
+        dirs += rands
+        dirs += [(f"topm_{m}", W_cone[:m]) for m in range(2, args.max_m + 1)]
+        if cone_full is not None:
+            dirs.append((f"cone_full_k{cone_k}", cone_full))
     print("направления: " + ", ".join(f"{n}[{b.shape[0]}]" for n, b in dirs))
+    for n, e, c in geom:
+        print(f"  {n}: вычтено {e:.3f} энергии, cos с исходным {c:.3f}")
 
     # --- прогон ---
     def run(prompts, basis, a, want):
@@ -174,13 +206,22 @@ def main():
                   f"metric={r['metric_mean']:+.3f}  KL={r['kl_ret']:.4f}", flush=True)
 
     # --- отчёт ---
-    lines = [f"# §6. Аблация общих осей на ступени `{rung}`", "",
+    title = ("§6б. Остаток DIM после вычитания общей компоненты"
+             if args.residual else "§6. Аблация общих осей")
+    lines = [f"# {title} — ступень `{rung}`", "",
              f"Модель {model_id}; harmful_test = {len(harmful)}, harmless_test = {len(harmless)}.",
              f"Без аблации: ASR = {base_asr:.3f}, metric_mean = {float(base_harm.mean()):+.3f}.", "",
              "Аблация частичная: h ← h − a·Ph во всех слоях (вход блока, выход attn, выход mlp).",
              "ASR — доля harmful с refusal_metric < 0. KL_ret — на harmless_test, "
              "kl_div_fn(baseline, ablated) как в rdo.py:516.", "",
-             "**Сравнивать направления можно только при близком KL_ret.**", "",
+             "**Сравнивать направления можно только при близком KL_ret.**", ""]
+    if geom:
+        lines += ["Что из чего вычтено (энергия — доля, ушедшая с вычитанием; cos — "
+                  "с исходным вектором):", "",
+                  "| направление | вычтено энергии | cos с исходным |", "|---|---|---|"]
+        lines += [f"| {n} | {e:.3f} | {c:.3f} |" for n, e, c in geom]
+        lines += [""]
+    lines += [
              "| направление | ранг | a | ASR | metric | KL_ret |", "|---|---|---|---|---|---|"]
     for r in rows:
         lines.append(f"| {r['direction']} | {r['rank']} | {r['alpha']:.2f} | "
