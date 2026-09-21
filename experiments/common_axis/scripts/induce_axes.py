@@ -24,7 +24,10 @@ alpha=1 сопоставим с протоколом статьи.
                 можно только при близком KL.
 
 КРОСС-НЕЙТРАЛИЗАЦИЯ. Отдельный блок: наводим отказ одним направлением и ОДНОВРЕМЕННО
-аблируем другое во всех слоях. Если аблация w снимает отказ, наведённый DIM, — они делят
+аблируем другое во всех слоях. Масштаб берётся НЕ максимальный из свипа, а тот, при котором
+наведение этим направлением реально работает (argmax refusal_rate по свипу): отклик на alpha
+немонотонен — при перестреле (2-8 x ||DIM||) отказ снова падает до нуля вместе с осмысленным
+выходом, и кросс-тест в этом режиме меряет поломку, а не нейтрализацию. Если аблация w снимает отказ, наведённый DIM, — они делят
 один канал; если нет — каналы разные. Контроль: та же пара со случайным направлением.
 
 Env: SAVE_DIR, DIM_DIR, REFUSAL_SPLITS, HUGGINGFACE_CACHE_DIR. Запускает пользователь.
@@ -40,8 +43,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="Qwen/Qwen2.5-3B-Instruct")
     ap.add_argument("--batch_size", type=int, default=16)
-    ap.add_argument("--scales", type=float, nargs="+", default=[0.5, 1.0, 2.0, 4.0],
-                    help="alpha в кратных ||DIM||")
+    ap.add_argument("--scales", type=float, nargs="+",
+                    default=[0.25, 0.5, 0.75, 1.0, 1.5, 2.0], help="alpha в кратных ||DIM||")
+    ap.add_argument("--cross_scale", type=float, default=None,
+                    help="масштаб для кросс-теста; по умолчанию argmax refusal_rate по свипу")
     ap.add_argument("--layer", type=int, default=None,
                     help="слой вмешательства (по умолчанию add_layer ступени из метаданных DIM)")
     ap.add_argument("--seed", type=int, default=21)
@@ -166,17 +171,30 @@ def main():
             print(f"[induce] {name:14s} x{sc:<4} rr={r['refusal_rate']:.3f} "
                   f"metric={r['metric_mean']:+.3f} KL={r['kl_ret']:.4f}", flush=True)
 
-    # --- кросс-нейтрализация на сильном наведении ---
-    sc = max(args.scales)
-    pairs = [("dim", "w_cone"), ("dim", "rand"), ("w_cone", "dim"), ("w_cone", "rand"),
-             ("dim", "dim"), ("w_cone", "w_cone")]
+    # --- кросс-нейтрализация в РАБОЧЕЙ точке наведения ---
+    best = {}
+    for name in DIRS:
+        cand = [r for r in rows if r["block"] == "induce" and r["direction"] == name]
+        best[name] = (args.cross_scale if args.cross_scale is not None
+                      else max(cand, key=lambda r: r["refusal_rate"])["scale"])
+        rr = max(cand, key=lambda r: r["refusal_rate"])["refusal_rate"]
+        print(f"рабочая точка {name}: x{best[name]} (rr={rr:.3f})")
+    pairs = [("dim", "w_cone"), ("dim", "rand"), ("dim", "dim"),
+             ("w_cone", "dim"), ("w_cone", "rand"), ("w_cone", "w_cone")]
+    if "w_mixed" in DIRS:
+        pairs += [("w_mixed", "dim"), ("w_mixed", "rand"), ("w_mixed", "w_mixed")]
     for ind, abl in pairs:
-        m = run(harmless, add=(DIRS[ind], sc * dim_norm), abl=DIRS[abl], want="metric")
-        r = {"block": "cross", "induce": ind, "ablate": abl, "scale": sc,
+        sc_i = best[ind]
+        m = run(harmless, add=(DIRS[ind], sc_i * dim_norm), abl=DIRS[abl], want="metric")
+        base_rr_ind = [r for r in rows if r["block"] == "induce"
+                       and r["direction"] == ind and r["scale"] == sc_i][0]["refusal_rate"]
+        r = {"block": "cross", "induce": ind, "ablate": abl, "scale": sc_i,
+             "induce_only_rr": base_rr_ind,
              "refusal_rate": float((m > 0).float().mean()), "metric_mean": float(m.mean())}
         rows.append(r)
-        print(f"[cross] наводим {ind:8s} + аблируем {abl:8s} -> rr={r['refusal_rate']:.3f} "
-              f"metric={r['metric_mean']:+.3f}", flush=True)
+        print(f"[cross] наводим {ind:8s} x{sc_i} (одно даёт {base_rr_ind:.3f}) + аблируем "
+              f"{abl:8s} -> rr={r['refusal_rate']:.3f} metric={r['metric_mean']:+.3f}",
+              flush=True)
 
     ind_rows = [r for r in rows if r["block"] == "induce"]
     cr_rows = [r for r in rows if r["block"] == "cross"]
@@ -192,11 +210,14 @@ def main():
     for r in ind_rows:
         L.append(f"| {r['direction']} | {r['scale']} | **{r['refusal_rate']:.3f}** | "
                  f"{r['metric_mean']:+.3f} | {r['kl_ret']:.4f} |")
-    L += ["", f"## Кросс-нейтрализация (наведение при α = {sc}·‖DIM‖ + аблация во всех слоях)", "",
-          "| наводим | аблируем | refusal_rate | metric |", "|---|---|---|---|"]
+    L += ["", "## Кросс-нейтрализация (наведение в рабочей точке + аблация во всех слоях)", "",
+          "Масштаб выбран по argmax refusal_rate свипа: отклик немонотонен, при перестреле "
+          "отказ падает вместе с осмысленным выходом.", "",
+          "| наводим | α (×‖DIM‖) | одно наведение | + аблируем | refusal_rate | metric |",
+          "|---|---|---|---|---|---|"]
     for r in cr_rows:
-        L.append(f"| {r['induce']} | {r['ablate']} | **{r['refusal_rate']:.3f}** | "
-                 f"{r['metric_mean']:+.3f} |")
+        L.append(f"| {r['induce']} | {r['scale']} | {r['induce_only_rr']:.3f} | "
+                 f"{r['ablate']} | **{r['refusal_rate']:.3f}** | {r['metric_mean']:+.3f} |")
     L += ["", "## Профиль нормированной проекции cos(h, w_cone) по слоям", "",
           "| слой | harmful | harmless | разрыв |", "|---|---|---|---|"]
     for i in range(len(pf_harm)):
