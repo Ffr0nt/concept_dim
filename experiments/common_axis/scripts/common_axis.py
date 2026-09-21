@@ -41,6 +41,11 @@ w_k = M^T u_k / ||M^T u_k||, где u_k — собственный вектор 
 усреднение идёт ровно по сидам. Для P между ступенями (§4 заметки) нужен отдельный нуль
 на стартовых реперах.
 
+ПОТОКИ. Матрицы тут маленькие (QR 2048xk, eigh N*k x N*k), а машина общая и 224-ядерная:
+по умолчанию torch поднимает ~175 потоков и жжёт ~25 ядер на арифметику, которой хватило бы
+одного. Поэтому число потоков ограничено явно (--threads, по умолчанию 8); раннер дополнительно
+выставляет OMP_NUM_THREADS до импорта torch.
+
 Запуск:
   bash experiments/common_axis/run/1_common_axis.sh
   python common_axis.py --base <fork>/results --out reports/common-axis.md
@@ -149,7 +154,11 @@ def main():
     ap.add_argument("--n_null", type=int, default=500)
     ap.add_argument("--seed", type=int, default=21)
     ap.add_argument("--out", default=None)
+    ap.add_argument("--threads", type=int, default=int(os.getenv("THREADS", "8")),
+                    help="потоков torch; машина общая, матрицы маленькие — см. докстринг")
     args = ap.parse_args()
+
+    torch.set_num_threads(max(1, args.threads))
 
     gen = torch.Generator().manual_seed(args.seed)
     lines = []
