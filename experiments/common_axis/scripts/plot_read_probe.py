@@ -34,6 +34,7 @@ def main():
     ap.add_argument("--json", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--mark_layer", type=int, default=22, help="слой вмешательства")
+    ap.add_argument("--note", default=None, help="подзаголовок: объём выборки и т.п.")
     args = ap.parse_args()
 
     rows = json.load(open(args.json))["rows"]
@@ -66,7 +67,12 @@ def main():
     ax.set_xlabel("слой", color=INK2, fontsize=9.5)
     ax.set_ylabel("AUROC: harmful против harmless (test)", color=INK2, fontsize=9.5)
     ax.set_title("Вредность декодируется рано, отказ формируется к слою 22",
-                 color=INK, fontsize=12.5, loc="left", pad=14)
+                 color=INK, fontsize=12.5, loc="left",
+                 pad=24 if args.note else 14)
+    if args.note:
+        ax.annotate(args.note, xy=(0, 1.0), xycoords="axes fraction",
+                    xytext=(0, 8), textcoords="offset points",
+                    color=INK2, fontsize=9, va="bottom")
     ax.grid(axis="y", color="#e6e5e1", lw=0.8)
     ax.set_axisbelow(True)
     for side in ("top", "right"):
