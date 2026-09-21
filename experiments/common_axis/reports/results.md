@@ -1,6 +1,14 @@
 # Common Axis — разбор прогона 1
 
-Сырые таблицы — [common-axis.md](common-axis.md) (генерируется скриптом, руками не править).
+> **Каталог отчётов.** Этот файл — разбор и выводы. Сырые таблицы собраны в четыре сводных
+> файла: [axes.md](axes.md) (поиск оси, шаги 1–3), [ablation.md](ablation.md) (§6),
+> [residual.md](residual.md) (§6б), [geometry.md](geometry.md) (§9), плюс
+> [induce.md](induce.md) (§7) и [read-probe.md](read-probe.md) (§8).
+> Подготовка эксперимента — в [preflight.md](preflight.md).
+> Раннеры пока пишут по файлу на ступень (`ablation-<ступень>.md` и т.п.) — после следующего
+> прогона их нужно будет снова свести сюда либо поправить раннеры.
+
+Сырые таблицы — [axes.md](axes.md#step-1) (генерируется скриптом, руками не править).
 Постановка — [../idea.md](../idea.md), сверка с данными — [preflight.md](preflight.md).
 
 Прогон: сервер, CPU, N = 3 сида (21/3/7), нуль — 500 наборов, Qwen2.5-3B-Instruct.
@@ -107,7 +115,7 @@ $(-1, 27)$, у malicious_use и all — $(-4, 22)$, и в чужой точке 
 
 ## Шаг 2: ось по всем прогонам сразу
 
-Сырые таблицы — [global-axis.md](global-axis.md). Состав: theft/illegal/malicious при
+Сырые таблицы — [axes.md](axes.md#step-2). Состав: theft/illegal/malicious при
 $k = 5$, `all` при $k = 7$ (общего $k$ у четырёх ступеней нет), три сида.
 
 ## Общий старт объясняет почти ничего
@@ -204,7 +212,7 @@ learned_directions, здесь видная в чистом виде.
 
 # Шаг 3: одна ось на выученные реперы и DIM вместе
 
-Сырые таблицы — [mixed-axis.md](mixed-axis.md). Популяция: 12 выученных реперов
+Сырые таблицы — [axes.md](axes.md#step-3). Популяция: 12 выученных реперов
 (theft/illegal/malicious $k=5$, `all` $k=7$, три сида) + 4 DIM как одномерные реперы.
 Вес объекта не зависит от его $k$: проектор даёт 1 на своём span-е, поэтому конус с $k=5$ и
 DIM с $k=1$ входят на равных. Режимы веса: **pooled** (1/N по всем 16) и **balanced**
@@ -257,7 +265,7 @@ $\lambda_2 = 0.23$–0.37 при нуле 0.085–0.137: и здесь разд�
 
 # Шаг 4 (§6): каузальный тест — ось работает, и работает лучше DIM
 
-Сырая таблица — [ablation-all.md](ablation-all.md), сырые числа —
+Сырая таблица — [ablation.md](ablation.md#rung-all), сырые числа —
 `results/common_axis/ablation-all.json`. Ступень `all`, Qwen2.5-3B-Instruct, held-out
 128 + 128 промптов. Без аблации ASR = 0.258.
 
@@ -317,9 +325,9 @@ $$w_\text{mixed} > w_\text{cone} > \text{topm}_2 \approx \text{cone\_full} > \te
 
 # Шаг 4б: те же направления на остальных трёх ступенях
 
-Сырые таблицы — [ablation-theft.md](ablation-theft.md),
-[ablation-illegal_activities.md](ablation-illegal_activities.md),
-[ablation-malicious_use.md](ablation-malicious_use.md).
+Сырые таблицы — [ablation.md](ablation.md#rung-theft),
+[ablation.md](ablation.md#rung-illegal_activities),
+[ablation.md](ablation.md#rung-malicious_use).
 
 $KL_{\text{ret}}$ у одного направления **совпадает между ступенями до четвёртого знака**
 (w_cone: 0.0409 / 0.0563 / 0.0583 / 0.0601 везде) — benign-набор в `build_splits` общий для
@@ -377,7 +385,7 @@ $KL = 0.143$, то есть при в 2.4 раза большем ущербе r
 
 # Шаг 5 (§6б): вычитаем общую компоненту из DIM — отказ сохраняется полностью
 
-Сырая таблица — [residual-all.md](residual-all.md). Ступень `all`, базовый ASR 0.258.
+Сырая таблица — [residual.md](residual.md#rung-all). Ступень `all`, базовый ASR 0.258.
 
 Геометрия вычитания: убрать $w_\text{cone}$ из DIM — это снять всего **26.8%** его энергии,
 остаток сохраняет $\cos = 0.855$ с исходным DIM. Топ-3 конусного подпространства снимает
@@ -450,9 +458,9 @@ retain.
 
 # Шаг 5б: остаток DIM на остальных трёх ступенях
 
-Сырые таблицы — [residual-theft.md](residual-theft.md),
-[residual-illegal_activities.md](residual-illegal_activities.md),
-[residual-malicious_use.md](residual-malicious_use.md).
+Сырые таблицы — [residual.md](residual.md#rung-theft),
+[residual.md](residual.md#rung-illegal_activities),
+[residual.md](residual.md#rung-malicious_use).
 
 Результат воспроизводится на всех четырёх ступенях, причём на узких общая ось занимает
 **меньшую** долю энергии DIM — и тем показательнее, что вся сила уходит вместе с ней.
@@ -508,7 +516,7 @@ DIM — это не направление отказа, а сумма напр�
 
 # Шаг 6 (§7): ось — refusal, а не harmfulness
 
-Сырая таблица — [induce-all.md](induce-all.md). Ступень `all`, безобидные промпты,
+Сырая таблица — [induce.md](induce.md). Ступень `all`, безобидные промпты,
 добавление $h \mapsto h + \alpha w$ на вход блока слоя 22 (add_layer ступени, как в
 `eval_cones.py`), единица $\alpha = \|\text{DIM}\| = 21.7$. Базовый `refusal_rate` на
 harmless = 0.055.
@@ -591,7 +599,7 @@ $\alpha$, а $KL$ читать как индикатор «вмешательс�
 
 # Шаг 7 (§8): read против write — двойная диссоциация
 
-Сырая таблица — [read-probe-all.md](read-probe-all.md). Ступень `all`. Проекция активации
+Сырая таблица — [read-probe.md](read-probe.md). Ступень `all`. Проекция активации
 последнего токена на направление даёт один скаляр на промпт.
 
 **Выборка — весь доступный пул: 1140 harmful и 1156 harmless** (train + val + test с дедупом;
@@ -637,7 +645,7 @@ $\alpha$, а $KL$ читать как индикатор «вмешательс�
 ![AUROC по слоям](read-probe-layers.png)
 
 График строит [plot_read_probe.py](../scripts/plot_read_probe.py), полная таблица по слоям —
-в [read-probe-all.md](read-probe-all.md). Ориентиры по всем слоям:
+в [read-probe.md](read-probe.md). Ориентиры по всем слоям:
 
 | что | значение |
 |---|---|
@@ -716,7 +724,7 @@ $KL$ — в нём три четверти балласта, который пл
 
 # Шаг 8 (§9): геометрия — DIM по критерию самой оси
 
-Сырые таблицы — [geometry-static.md](geometry-static.md). Всё считается на сохранённых
+Сырые таблицы — [geometry.md](geometry.md). Всё считается на сохранённых
 артефактах (12 конусов pooled-популяции + `mean_diffs`), CPU, модель не грузится.
 
 Вопрос шага: чем ось отличается от DIM **как вектор**, раз функционально они так резко
@@ -832,9 +840,9 @@ $w_{mixed}$ отдаёт четверть конусного критерия (0
 
 # Шаг 8б (§9): проекции активаций — ось молчит там, где DIM говорит
 
-Сырые таблицы — [geometry-theft.md](geometry-theft.md),
-[geometry-illegal_activities.md](geometry-illegal_activities.md),
-[geometry-malicious_use.md](geometry-malicious_use.md), [geometry-all.md](geometry-all.md).
+Сырые таблицы — [geometry.md](geometry.md#rung-theft),
+[geometry.md](geometry.md#rung-illegal_activities),
+[geometry.md](geometry.md#rung-malicious_use), [geometry.md](geometry.md#rung-all).
 Один форвард-проход без вмешательства, 128 + 128 held-out промптов на ступень, батч 1;
 проекции сняты во всех 36 слоях и во всех трёх точках, куда бьёт аблация. Кэш —
 `results/common_axis/proj-<rung>.pt` (11 МБ на ступень), анализ по нему считается на CPU.
