@@ -28,7 +28,10 @@ stream. Нормы самих направлений сравнивать неч
    - E|p| и E|p|/E||h|| — абсолютный уровень проекции: сколько вектора реально удаляет
      аблация h <- h - a (v^T h) v;
    - Var(p)/(tr Sigma / hidden) — доля дисперсии на направлении против изотропного нуля:
-     сидит ли DIM на высокодисперсной оси (ковариационный тест).
+     сидит ли DIM на высокодисперсной оси (ковариационный тест). Считается ПО ПРОМПТАМ на
+     последней позиции: по всем токенам и дисперсию, и удаляемую энергию съедает sink-токен
+     (у Qwen E||h||^2 на нём на два порядка больше, чем в точке чтения), поэтому доля нормы
+     усредняется по токенам как отношение, а не как отношение сумм.
    Read-сторона пересекается с §8 (read_probe.py, AUROC/точность детектора): там она
    мерится как качество классификатора, здесь — как d' и уровень проекции, потому что
    нужна та же шкала, в которой считается удаляемая энергия.
@@ -315,60 +318,74 @@ def stage_acts(args, emit):
     # --- B. доля дисперсии (ковариационный тест) -------------------------
     emit("## B. Доля дисперсии на направлении (ковариационный тест)")
     emit()
-    emit("$\\mathrm{Var}(p_v)$ против изотропного уровня $\\operatorname{tr}\\Sigma/d$: "
-         "лежит ли направление на высокодисперсной оси активаций. Считается по всем "
-         "токенам промпта на harmless.")
+    emit("$\\mathrm{Var}(p_v)$ ПО ПРОМПТАМ на последней позиции против изотропного уровня "
+         "$\\operatorname{tr}\\Sigma/d$ той же популяции: лежит ли направление на "
+         "высокодисперсной оси активаций. По всем токенам эту величину считать нельзя — "
+         "её съедает sink-токен (см. секцию C).")
     emit()
-    s = st("harmless")
+    s_ = st("harmless")
+    n_p = s_["n_prompts"]
     emit("| направление | " + " | ".join(f"Var/изотроп, {x}" for x in S) + " |")
     emit("|---|" + "---|" * len(S))
     iso = {}
     for site in S:
-        n_tok = float(s["n_tok"][site])
-        mean_h = s["sum_h"][site] / n_tok                       # [L, hidden]
-        tr = float(s["sum_h2"][site][lay] / n_tok) - float(mean_h[lay].pow(2).sum())
-        iso[site] = tr / hidden
+        h2 = float((s_["eoi_n"][site][:, -1, lay] ** 2).mean())
+        mh = s_["sum_h_last"][site][lay] / n_p
+        iso[site] = (h2 - float(mh.pow(2).sum())) / hidden
     for i, nm in enumerate(dirs):
         cells = []
         for site in S:
-            n_tok = float(s["n_tok"][site])
-            m1 = float(s["sum_p"][site][lay, i]) / n_tok
-            m2 = float(s["sum_p2"][site][lay, i]) / n_tok
-            cells.append(f"{(m2 - m1 * m1) / iso[site]:.1f}")
+            pv = s_["eoi"][site][:, -1, lay, i].double()
+            cells.append(f"{float(pv.var(unbiased=False)) / iso[site]:.1f}")
         emit(f"| {nm} | " + " | ".join(cells) + " |")
     emit()
-    emit("Единица — дисперсия случайного направления в среднем; значение 10 означает "
-         "«вдесятеро дисперснее случайного».")
+    emit("Единица — дисперсия случайного направления в среднем (изотропный нуль); "
+         "значение 10 означает «вдесятеро дисперснее случайного».")
     emit()
 
     # --- C. что стирается при аблации и цена по KL ------------------------
     emit("## C. Сколько сигнала стирает аблация и чем это оборачивается в $KL_{ret}$")
     emit()
-    emit("Полная аблация удаляет из каждого тензора вектор длиной $|p_v|$ во всех слоях "
-         "и всех трёх точках. Относительная удалённая энергия "
-         "$E_{rel} = \\sum_{l,\\text{site}} E[p^2] / \\sum_{l,\\text{site}} E\\|h\\|^2$ "
-         "на harmless — прямая мера ущерба; рядом измеренный $KL_{ret}$ при $a = 1$ из "
-         "шагов 4-5.")
+    emit("Полная аблация удаляет из каждого тензора вектор длиной $|p_v|$ во всех слоях и "
+         "всех трёх точках вмешательства. Основная мера — **средняя по токенам доля нормы** "
+         "$\\overline{p^2/\\|h\\|^2}$ (каждый токен весит одинаково, изотропный нуль = "
+         f"1/hidden = {1/hidden:.5f}). Энергетически взвешенная версия "
+         "$\\sum p^2/\\sum\\|h\\|^2$ дана рядом, но читать её нельзя как ущерб: у Qwen "
+         "норма residual stream на sink-токене на два порядка выше, чем в точке чтения, и "
+         "она эту сумму и определяет.")
     emit()
-    emit("| направление | $E_{rel}$ harmless | $E_{rel}$ harmful | $KL_{ret}$ ($a{=}1$) | "
-         "ASR ($a{=}1$) | $KL/E_{rel}$ |")
+    emit("| направление | доля нормы (harmless) | доля нормы (harmful) | энергетически "
+         "взвешенная | $KL_{ret}$ ($a{=}1$) | ASR ($a{=}1$) |")
     emit("|---|---|---|---|---|---|")
-    rel = {}
+    rel, wgt = {}, {}
     for setname in ("harmless", "harmful"):
         ss = st(setname)
         num = torch.zeros(len(dirs), dtype=torch.float64)
-        den = 0.0
+        eng_num, eng_den, cnt = torch.zeros(len(dirs), dtype=torch.float64), 0.0, 0
         for site in S:
-            num += ss["sum_p2"][site].sum(0).double()
-            den += float(ss["sum_h2"][site].sum())
-        rel[setname] = num / den
+            num += ss["sum_rel"][site].sum(0).double() / float(ss["n_tok"][site])
+            cnt += ss["sum_rel"][site].shape[0]
+            eng_num += ss["sum_p2"][site].sum(0).double()
+            eng_den += float(ss["sum_h2"][site].sum())
+        rel[setname] = num / cnt
+        wgt[setname] = eng_num / eng_den
     for i, nm in enumerate(dirs):
         k = kl.get(nm, {}).get(1.0)
         ks = f"{k[0]:.4f}" if k else "—"
         asr = f"{k[1]:.3f}" if k else "—"
-        ratio = f"{k[0] / float(rel['harmless'][i]):.2f}" if k else "—"
-        emit(f"| {nm} | {float(rel['harmless'][i]):.4f} | {float(rel['harmful'][i]):.4f} | "
-             f"{ks} | {asr} | {ratio} |")
+        emit(f"| {nm} | **{float(rel['harmless'][i]):.5f}** | "
+             f"{float(rel['harmful'][i]):.5f} | {float(wgt['harmless'][i]):.5f} | "
+             f"{ks} | {asr} |")
+    emit()
+    emit("Сравнивать направления по $KL$ при разной удаляемой доле — и есть проверка "
+         "механизма: если ось дешевле DIM просто потому, что стирает меньше, отношение "
+         "$KL$ к доле нормы у них совпадёт.")
+    emit()
+    for nm in dirs:
+        k = kl.get(nm, {}).get(1.0)
+        if k:
+            i = dirs.index(nm)
+            emit(f"- {nm}: $KL$/доля = {k[0] / float(rel['harmless'][i]):.1f}")
     emit()
 
     # --- D. профиль по слоям ---------------------------------------------

@@ -9,7 +9,16 @@
 ЧТО СНИМАЕТСЯ. Ровно те тензоры, в которые бьёт аблация шагов 4-5: вход блока (`resid`),
 выход self_attn (`attn`), выход mlp (`mlp`) — во всех слоях. На каждый тензор:
   проекции на все направления по последним n_eoi позициям (нужны распределения по промптам);
-  суммы p, p^2, h и ||h||^2 по ВСЕМ позициям промпта (нужны дисперсия и tr Sigma).
+  суммы p, p^2, h и ||h||^2 по ВСЕМ позициям промпта;
+  сумма ОТНОШЕНИЙ p^2/||h||^2 по токенам и сумма h на последней позиции.
+
+ЗАЧЕМ ОТНОШЕНИЯ, А НЕ ТОЛЬКО СУММЫ. У Qwen норма residual stream на sink-токене (первая
+позиция) на порядки больше, чем в точке чтения: замер на ступени `all`, слой 10 — E||h||^2 по
+всем токенам 3.7e5 против 3.3e3 по пяти последним позициям, отношение 113x. Поэтому
+энергетически взвешенная «удалённая доля» sum p^2 / sum ||h||^2 меряет в основном sink-токен
+и для случайного направления даёт 3e-5 вместо 1/2048; как мера ущерба она непригодна.
+Робастная величина — среднее по токенам отношение p^2/||h||^2 (каждый токен весит одинаково),
+она и накапливается отдельно в sum_rel.
 Батч фиксирован в 1: при батчировании в тензор попадают паддинг-позиции, и суммы по
 позициям перестают быть суммами по реальным токенам. Полные активации не сохраняются —
 всё сворачивается внутри trace, на диск уходит ~8 МБ на ступень.
@@ -107,7 +116,9 @@ def main():
             "eoi_n": {s: torch.zeros(n, args.n_eoi, L) for s in SITES},
             "sum_p": {s: torch.zeros(L, len(names), dtype=torch.float64) for s in SITES},
             "sum_p2": {s: torch.zeros(L, len(names), dtype=torch.float64) for s in SITES},
+            "sum_rel": {s: torch.zeros(L, len(names), dtype=torch.float64) for s in SITES},
             "sum_h": {s: torch.zeros(L, hidden, dtype=torch.float64) for s in SITES},
+            "sum_h_last": {s: torch.zeros(L, hidden, dtype=torch.float64) for s in SITES},
             "sum_h2": {s: torch.zeros(L, dtype=torch.float64) for s in SITES},
             "n_tok": {s: 0 for s in SITES},
         }
@@ -122,17 +133,21 @@ def main():
                             (h @ Vt).save(),              # [seq, D]
                             h.pow(2).sum(-1).save(),      # [seq]
                             h.sum(0).save(),              # [hidden]
+                            h[-1].save(),                 # [hidden], последняя позиция
                         ))
             for li in range(L):
                 for si, s in enumerate(SITES):
-                    p, n2, sh = (x.value.detach().float().cpu()
-                                 for x in saved[li * len(SITES) + si])
+                    p, n2, sh, hl = (x.value.detach().float().cpu()
+                                     for x in saved[li * len(SITES) + si])
                     k = min(args.n_eoi, p.shape[0])
                     acc["eoi"][s][i, -k:, li] = p[-k:]
                     acc["eoi_n"][s][i, -k:, li] = n2[-k:].sqrt()
                     acc["sum_p"][s][li] += p.double().sum(0)
                     acc["sum_p2"][s][li] += p.double().pow(2).sum(0)
+                    acc["sum_rel"][s][li] += (p.double().pow(2)
+                                              / n2.double().clamp(min=1e-12).unsqueeze(1)).sum(0)
                     acc["sum_h"][s][li] += sh.double()
+                    acc["sum_h_last"][s][li] += hl.double()
                     acc["sum_h2"][s][li] += float(n2.double().sum())
                     if li == 0:
                         acc["n_tok"][s] += p.shape[0]
