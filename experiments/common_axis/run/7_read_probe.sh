@@ -6,6 +6,7 @@
 # Использование:
 #   GPU=0 bash experiments/common_axis/run/7_read_probe.sh
 #   GPU=0 RUNGS="all theft" NMAX=500 bash .../7_read_probe.sh
+#   GPU=0 NORMALIZE=1 bash .../7_read_probe.sh    # проекции от h/||h||, без масштаба
 #
 # Env: GPU (0), MODEL, RUNGS (all), NMAX (0 = весь пул train+val+test), BS (16), FORK.
 set -euo pipefail
@@ -20,6 +21,7 @@ GPU="${GPU:-0}"
 MODEL="${MODEL:-Qwen/Qwen2.5-3B-Instruct}"
 RUNGS="${RUNGS:-all}"
 NMAX="${NMAX:-0}"
+NORMALIZE="${NORMALIZE:-0}"
 BS="${BS:-16}"
 
 cd "$FORK"
@@ -29,13 +31,17 @@ export HUGGINGFACE_CACHE_DIR="/home/jovyan/.cache/huggingface/hub"
 [ -f "results/common_axis/global/pooled.pt" ] || {
   echo "нет results/common_axis/global/pooled.pt — сначала CPU-шаги 1-2" >&2; exit 1; }
 
+NORM_FLAG=""; SUFFIX=""
+[ "$NORMALIZE" = "1" ] && { NORM_FLAG="--normalize"; SUFFIX="-normalized"; }
+
 echo "модель=$MODEL  GPU=$GPU  RUNGS='$RUNGS'  NMAX=$NMAX (0 = весь пул)"
 for r in $RUNGS; do
   echo "=== §8 read-пробник: $r ==="
   REFUSAL_SPLITS="$r" DIM_DIR="dim/$r" CUDA_VISIBLE_DEVICES="$GPU" \
     uv run python "$EXP/scripts/read_probe.py" \
       --model "$MODEL" --batch_size "$BS" --n_max "$NMAX" \
-      --out "$EXP/reports/read-probe-$r.md" \
-      --json_out "$FORK/results/common_axis/read-probe-$r.json"
+      $NORM_FLAG \
+      --out "$EXP/reports/read-probe$SUFFIX-$r.md" \
+      --json_out "$FORK/results/common_axis/read-probe$SUFFIX-$r.json"
 done
 echo "готово"

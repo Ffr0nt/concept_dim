@@ -23,6 +23,15 @@ read-компонента (коррелирует с вредностью, но 
           на пятом, результат усредняется. Порог ищется векторно по cumsum, а не перебором.
   d Коэна на всём пуле как мера разделимости.
 
+КОНФАУНДЕР МАСШТАБА. Случайное направление берёт AUROC 0.75-0.88 на части слоёв — это не
+шум (при ~1150 на класс шумовой уровень ~0.51), а признак того, что классы разъехались
+ГЛОБАЛЬНО: для случайного v эффект ~ ||mu_diff|| / sqrt(tr Sigma), размерность сокращается.
+Главный подозреваемый — норма активации (harmful и harmless различаются длиной и стилем, а
+<h, v> линейно растёт с ||h||). Поэтому считаются два диагностических среза:
+  направление `act_norm` — детектор, у которого скор это само ||h||: прямая мера конфаундера;
+  флаг --normalize — все проекции берутся от h/||h||, то есть масштаб убран. Если случайное
+  проседает к 0.5, а содержательные направления держатся, конфаундер был именно в норме.
+
 Репортится на ФИКСИРОВАННЫХ слоях (начальный, средний, add_layer ступени, последний): выбор
 лучшего из 36 слоёв завышает оценку отбором, особенно у слабых направлений (случайное так
 берёт 0.866 вместо медианных ~0.64).
@@ -106,6 +115,8 @@ def main():
     ap.add_argument("--batch_size", type=int, default=16)
     ap.add_argument("--n_max", type=int, default=0,
                     help="ограничить пул каждого класса (0 = весь train+val+test)")
+    ap.add_argument("--normalize", action="store_true",
+                    help="проецировать h/||h|| вместо h — убирает конфаундер масштаба")
     ap.add_argument("--folds", type=int, default=5, help="фолдов для точности")
     ap.add_argument("--n_boot", type=int, default=1000, help="бутстрэп-повторов для ДИ")
     ap.add_argument("--seed", type=int, default=21)
@@ -185,9 +196,13 @@ def main():
         # потолок слоя: разность средних ЭТОГО слоя. Считается на том же пуле, что и оценка,
         # поэтому это именно ПОТОЛОК (оптимистичный ориентир), а не честный held-out.
         HP, HN = A["pos"][:, L].float(), A["neg"][:, L].float()
+        # норма активации как отдельный детектор — прямая мера конфаундера масштаба
+        norm_p, norm_n = HP.norm(dim=1), HN.norm(dim=1)
+        if args.normalize:
+            HP, HN = HP / norm_p.unsqueeze(1), HN / norm_n.unsqueeze(1)
         md = unit(HP.mean(0) - HN.mean(0))
-        for name, v in list(DIRS.items()) + [("meandiff_layer", md)]:
-            sp, sn = HP @ v, HN @ v
+        for name, v in list(DIRS.items()) + [("meandiff_layer", md), ("act_norm", None)]:
+            sp, sn = (norm_p, norm_n) if v is None else (HP @ v, HN @ v)
             pooled = ((sp.var() + sn.var()) / 2).sqrt()
             r = {"layer": L, "direction": name, "auroc": auroc(sp, sn),
                  "acc_cv": cv_accuracy(sp, sn, args.folds, args.seed),
@@ -197,7 +212,7 @@ def main():
                 r["auroc_lo"], r["auroc_hi"] = lo, hi
             rows.append(r)
 
-    names = list(DIRS) + ["meandiff_layer"]
+    names = list(DIRS) + ["meandiff_layer", "act_norm"]
     best_layer = {n: max((r for r in rows if r["direction"] == n), key=lambda r: r["auroc"])
                   for n in names}
     for n in names:
@@ -214,7 +229,9 @@ def main():
          f"Модель {model_id}. Проекция активации последнего токена на направление. "
          f"Пул: **{len(pool_pos)} harmful + {len(pool_neg)} harmless** (train+val+test, "
          f"дедуп). AUROC порога не требует и считается на всём пуле, 95% ДИ — бутстрэп "
-         f"({args.n_boot}); точность — {args.folds}-фолдовая кросс-валидация.",
+         f"({args.n_boot}); точность — {args.folds}-фолдовая кросс-валидация."
+         + (" **Активации нормированы: проекции берутся от h/‖h‖.**" if args.normalize
+            else " Проекции от сырых активаций; `act_norm` — детектор по самой ‖h‖."),
          "Знак направления произволен, поэтому AUROC берётся как max(auc, 1−auc).",
          "`meandiff_layer` — разность средних, посчитанная на train ЭТОГО слоя: потолок слоя.", "",
          "## Фиксированные слои (основная таблица)", "",
