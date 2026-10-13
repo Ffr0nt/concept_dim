@@ -25,6 +25,7 @@ checkpoints/
 *.safetensors
 *.bin
 logs/
+*.log
 wandb/
 outputs/
 

@@ -32,6 +32,7 @@ DIM (AUROC 0.997) и причинно не участвует ни в чём. П
 | [reports/residual.md](reports/residual.md) | §6б — остаток DIM, 4 ступени |
 | [reports/induce.md](reports/induce.md) | §7 — наведение отказа и кросс-нейтрализация |
 | [reports/read-probe.md](reports/read-probe.md) | §8 — read против write по слоям |
+| [reports/read-probe-normalized.md](reports/read-probe-normalized.md) | §8 на нормированных активациях h/‖h‖ — проверка конфаундера масштаба |
 | [reports/geometry.md](reports/geometry.md) | §9 — геометрия компоненты и DIM |
 | [reports/read-probe-layers.png](reports/read-probe-layers.png) | профиль AUROC по слоям |
 
