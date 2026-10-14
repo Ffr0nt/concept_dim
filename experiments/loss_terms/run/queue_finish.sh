@@ -100,7 +100,8 @@ run_job() {   # $1 — задача, $2 — карта (для geometry не и�
 
 cd "$ROOT"
 echo "$(ts) очередь-2: $JOBS; жду закрытия сессии $WAIT_SESSION"
-while tmux has-session -t "$WAIT_SESSION" 2>/dev/null; do sleep "$POLL"; done
+# "=" — точное имя: без него tmux ищет по префиксу, и fz-loss-terms совпадает с fz-loss-terms-2
+while tmux has-session -t "=$WAIT_SESSION" 2>/dev/null; do sleep "$POLL"; done
 echo "$(ts) сессия $WAIT_SESSION закрыта"
 last_end=$(date +%s)                  # первая очередь только что кончилась — та же пауза
 for job in $JOBS; do
