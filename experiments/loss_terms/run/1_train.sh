@@ -22,7 +22,7 @@ read -ra V_LIST <<< "$VARIANTS"
 D_ARGS=()
 if [[ -n "${DOMAINS:-}" ]]; then read -ra D_LIST <<< "$DOMAINS"; D_ARGS=(--domains "${D_LIST[@]}"); fi
 
-TAG="$(echo "${DOMAINS:-all}" | tr ' ' '-')"
+TAG="$(echo "$VARIANTS ${DOMAINS:-all}" | tr ' ' '-')"   # разный у параллельных процессов
 echo "обучение: варианты=$VARIANTS  домены=${DOMAINS:-все}  GPU=$GPU  out=$OUT"
 py train.py --out "$OUT" --variants "${V_LIST[@]}" "${D_ARGS[@]}" \
   2>&1 | tee "$OUT/logs/train-$TAG-$(date +%Y%m%d-%H%M%S).log"
