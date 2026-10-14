@@ -57,5 +57,5 @@ for job in $JOBS; do
   pids+=($!)
 done
 
-for p in "${pids[@]}"; do wait "$p"; echo "$(ts) задача PID $p завершилась с кодом $?"; done
+for p in "${pids[@]}"; do wait "$p"; rc=$?; echo "$(ts) задача PID $p завершилась с кодом $rc"; done   # $? до $(ts)
 echo "$(ts) все задачи завершены"
