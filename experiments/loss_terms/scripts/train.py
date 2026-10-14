@@ -29,6 +29,8 @@ def command(cfg, run, fam, domain, out_dir, todo, spec):
         assert spec.get("norm_lambda") is not None, \
             "free_norm: norm_lambda не задан — сначала калибровка (run/0_calibrate_norm.sh)"
         cmd += ["--free_norm", "--norm_lambda", str(spec["norm_lambda"])]
+    if spec.get("addition_mode"):
+        cmd += ["--addition_mode", spec["addition_mode"]]
     return cmd, hp
 
 
