@@ -55,6 +55,11 @@ def directions(args, cfg, run):
                 out.append((f"{v}:{n}", vec, {"kind": "vector", "variant": v, "domain": m["domain"], "seed": m["seed"],
                                                "native_scale": float(raw[n]["alpha"]) * m["norm"]
                                                if v == "free_norm" else None}))
+    if args.negative_too:
+        # наведение вектором со знаком минус: аблация от знака не зависит, поэтому эти строки —
+        # только наведение (нужно, когда знак оси обучением не задан: no_add, invariant)
+        out += [(f"{n}(-)", -v, {**m, "sign": -1, "native_scale": None})
+                for n, v, m in out if m["kind"] in ("component", "vector")]
     return out, float(D["union"].norm())
 
 
@@ -74,7 +79,7 @@ def measure(args):
 
     path = os.path.join(args.out, "causal.json")
     res = read_json(path) if os.path.exists(path) else {}
-    done = {r["direction"] for r in res.get("ablation", [])}
+    done = {r["direction"] for r in res.get("ablation", []) + res.get("induce", [])}
     if all(n in done for n, _, _ in todo):
         print("все направления уже замерены")
         return
@@ -102,7 +107,7 @@ def measure(args):
     for name, v, meta in todo:
         if name in done:
             continue
-        for a in args.alphas:
+        for a in ([] if meta.get("sign") == -1 else args.alphas):
             by_d = {d: asr(fwd(p, v, a), rtoks) for d, p in harmful.items()}
             row = {"direction": name, **meta, "alpha": a, "kl": kl(base_harmless, fwd(harmless, v, a)),
                    "asr": by_d, "asr_mean": sum(by_d.values()) / len(by_d)}
@@ -124,7 +129,7 @@ def report(args):
 
     def group_key(r):
         if r["kind"] == "vector":
-            return f"{r['variant']} (среднее по сидам)"
+            return f"{r['variant']}{'(-)' if r.get('sign') == -1 else ''} (среднее по сидам)"
         if r["kind"] == "random":
             return "rand (среднее)"
         return r["direction"]
@@ -160,9 +165,10 @@ def report(args):
     L += ["", "## По векторам: ASR при a = 1 и наведение при s = 1", ""]
     vec = [r for r in abl if r["kind"] == "vector" and r["alpha"] == 1.0]
     ind1 = {r["direction"]: r for r in ind if r["kind"] == "vector" and r["scale"] == 1.0 and not r["native"]}
-    L += table(["вектор", "KL", "ASR", "отказ при s=1"],
-               [[r["direction"], f"{r['kl']:.4f}", f"{r['asr_mean']:.3f}",
-                 f"{ind1[r['direction']]['refusal_rate']:.3f}" if r["direction"] in ind1 else "—"] for r in vec])
+    rate = lambda k: f"{ind1[k]['refusal_rate']:.3f}" if k in ind1 else "—"
+    L += table(["вектор", "KL", "ASR", "отказ при s=1", "отказ при s=1, −v"],
+               [[r["direction"], f"{r['kl']:.4f}", f"{r['asr_mean']:.3f}", rate(r["direction"]),
+                 rate(r["direction"] + "(-)")] for r in vec])
     os.makedirs(os.path.dirname(args.report), exist_ok=True)
     with open(args.report, "w") as f:
         f.write("\n".join(L) + "\n")
@@ -179,6 +185,8 @@ def main():
     ap.add_argument("--rand-seed", type=int, default=0)
     ap.add_argument("--batch-size", type=int, default=16)
     ap.add_argument("--components-only", action="store_true", help="только w_V, DIM и случайные (быстро)")
+    ap.add_argument("--negative-too", action="store_true",
+                    help="наведение ещё и векторами со знаком минус (компоненты и векторы вариантов)")
     ap.add_argument("--report-only", action="store_true")
     args = ap.parse_args()
     if not args.report_only:
