@@ -15,6 +15,7 @@ import re
 import torch
 
 from common import base, variant_dir
+from shared_refusal.artifacts import write_json
 from shared_refusal.directions import rdo
 from shared_refusal.report import table
 
@@ -58,8 +59,16 @@ def main():
              "заканчивающимся сохранённым вектором (train-батчи).", ""]
     lines += table(["μ", "домен", "сид", "шагов", "‖z‖ сохр.", "‖z‖ мин–макс", "bypass", "induce",
                     "lowest loss", "cos с base", "cos со стартом"], rows)
-    lines += ["", f"Правило: наибольшее μ с induce > 0 и bypass < 0 → **{max(ok):g}**" if ok
+    mus = sorted({float(r[0]) for r in rows})
+    chosen = max(ok) if ok else None
+    lines += ["", f"Правило: наибольшее μ с induce > 0 и bypass < 0 → **{chosen:g}**" if ok
               else "Правило: ни одно μ не прошло — сетку нужно сдвинуть вниз."]
+    if ok and chosen == max(mus):
+        lines += ["", "Внимание: выбрано верхнее μ сетки — граница не найдена, сетку стоит расширить вверх."]
+    # решение правила — его читает train.py для free_norm (если NORM_LAMBDA в common.py не задан)
+    write_json({"norm_lambda": chosen, "mus": mus, "passed": sorted(ok),
+                "at_upper_edge": bool(ok and chosen == max(mus))},
+               os.path.join(args.out, "calibration.json"))
     os.makedirs(os.path.dirname(args.report), exist_ok=True)
     with open(args.report, "w") as f:
         f.write("\n".join(lines) + "\n")

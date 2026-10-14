@@ -27,7 +27,7 @@ def command(cfg, run, fam, domain, out_dir, todo, spec):
                       os.path.join(run.rdo(domain), "targets"), out_dir, todo, hp)
     if spec.get("free_norm"):
         assert spec.get("norm_lambda") is not None, \
-            "free_norm: norm_lambda не задан — сначала калибровка (run/0_calibrate_norm.sh), затем NORM_LAMBDA в common.py"
+            "free_norm: norm_lambda не задан — сначала калибровка (run/0_calibrate_norm.sh)"
         cmd += ["--free_norm", "--norm_lambda", str(spec["norm_lambda"])]
     return cmd, hp
 
@@ -88,6 +88,13 @@ def main():
     for v in variants:
         spec = VARIANTS[v]
         assert spec is not None, f"{v} не обучается (векторы берутся из базового запуска)"
+        if spec.get("free_norm") and spec.get("norm_lambda") is None:
+            p = os.path.join(args.out, "calibration.json")
+            assert os.path.exists(p), f"free_norm: нет {p} — сначала калибровка (run/0_calibrate_norm.sh)"
+            mu = read_json(p)["norm_lambda"]
+            assert mu is not None, f"free_norm: по {p} ни одно μ не прошло правило"
+            print(f"free_norm: μ = {mu:g} по правилу калибровки ({p})")
+            spec = {**spec, "norm_lambda": mu, "norm_lambda_source": p}
         for d in domains:
             out_dir = os.path.join(args.out, v, d)
             todo = rdo.pending(out_dir, seeds(cfg, d))

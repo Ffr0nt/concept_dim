@@ -16,8 +16,9 @@ BASE_CONFIG = os.path.join(REPO, "configs", "qwen2.5-3b_salad-o1o2o5o6.yaml")
 N_SEEDS = 3   # первые N сидов каждого домена базового запуска — пары с тем же стартом
 
 # Изменения относительно rdo.hparams базового конфига. base не обучается.
-# free_norm: norm_lambda задаётся по итогам калибровки (run/0_calibrate_norm.sh) — до этого
-# обучение free_norm отказывается стартовать.
+# free_norm: norm_lambda — по итогам калибровки. Если NORM_LAMBDA здесь не задан, train.py берёт
+# решение правила из <out>/calibration.json (пишет scripts/calibration.py); нет файла — обучение
+# free_norm не стартует.
 NORM_LAMBDA = None
 VARIANTS = {
     "base": None,
