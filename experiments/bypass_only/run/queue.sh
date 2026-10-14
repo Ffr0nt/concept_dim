@@ -87,7 +87,7 @@ run_job() {   # $1 — задача, $2 — карта (для geometry не и�
 cd "$ROOT"
 echo "$(ts) очередь bypass_only: $JOBS; жду закрытия сессий: $WAIT_SESSIONS"
 for sess in $WAIT_SESSIONS; do
-  while tmux has-session -t "$sess" 2>/dev/null; do sleep "$POLL"; done
+  while tmux has-session -t "=$sess" 2>/dev/null; do sleep "$POLL"; done   # "=" — точное имя, не префикс
 done
 echo "$(ts) сессии закрыты"
 for v in no_add no_abl; do
