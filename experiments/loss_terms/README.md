@@ -2,7 +2,13 @@
 
 ## Коротко
 
-**Статус: подготовлен, не запущен.**
+**Статус: завершён (15.10.2026). Обе гипотезы отвергнуты** — разбор в [reports/results.md](reports/results.md).
+
+- Общую ось задаёт слагаемое снятия $L_{abl}$, а не наведения: без $L_{add}$ ось та же
+  ($\cos = 0.86$, $\lambda_1$ 0.41 против 0.40), без $L_{abl}$ — уходит ($\cos = 0.53$) и не снимает отказ.
+- Ось снятия сама наводит отказ ($w_{no\_add}$ — 0.91 при $s=1$), хотя ось наведения лежит в
+  стороне ($\cos(w_{no\_add}, w_{no\_abl}) = 0.26$).
+- Штраф на норму (`free_norm`, μ = 0.3) сиды не сближает.
 
 Две гипотезы на одной сетке вариантов лосса одномерного RDO:
 
@@ -27,8 +33,8 @@
 | [scripts/geometry.py](scripts/geometry.py) | шаг 2: компоненты, согласованность сидов, парное сравнение |
 | [scripts/causal.py](scripts/causal.py) | шаг 3: снятие (аблация) и наведение отказа |
 
-Отчёты появятся в `reports/` (`calibration.md`, `geometry.md`, `causal.md`, затем
-`results.md` с разбором). Артефакты (векторы, json) — на сервере в
+Отчёты: [reports/results.md](reports/results.md) — **разбор**; сырые числа —
+[calibration.md](reports/calibration.md), [geometry.md](reports/geometry.md), [causal.md](reports/causal.md). Артефакты (векторы, json) — на сервере в
 `<fork>/results/loss_terms/`, в git не хранятся.
 
 ## Порядок прогонов
