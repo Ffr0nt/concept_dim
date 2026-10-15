@@ -6,8 +6,11 @@ export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
 HERE="$(cd "$(dirname "${BASH_SOURCE[1]}")" && pwd)"
 EXP="$(cd "$HERE/.." && pwd)"
 ROOT="$(cd "$EXP/../.." && pwd)"                                   # concept_dim
-FORK="$(cd "$ROOT/${FORK:-../geometry-of-refusal}" && pwd)"
-SRC="$(cd "$ROOT/${SRC:-../shared-refusal-component}" && pwd)"
+# относительные пути — от корня concept_dim, абсолютные (FORK экспортируется ниже и приходит
+# во вложенные раннеры, например из 4_sweep.sh) — как есть
+_abs() { case "$1" in /*) echo "$1" ;; *) echo "$ROOT/$1" ;; esac; }
+FORK="$(cd "$(_abs "${FORK:-../geometry-of-refusal}")" && pwd)"
+SRC="$(cd "$(_abs "${SRC:-../shared-refusal-component}")" && pwd)"
 OUT="${OUT:-$FORK/results/bypass_only}"
 export FORK                                                         # shared_refusal.artifacts.FORK
 
