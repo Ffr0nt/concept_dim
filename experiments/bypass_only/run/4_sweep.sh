@@ -7,12 +7,13 @@
 #
 # Использование:
 #   GPU=1 bash experiments/bypass_only/run/4_sweep.sh
+#   GPU=0 VARIANTS="invariant_0.01 invariant_0.003" bash experiments/bypass_only/run/4_sweep.sh
 #
-# Env: GPU, HALF_A ("O1 O2"), HALF_B ("O5 O6"), FORK, SRC, OUT.
+# Env: GPU, VARIANTS ("invariant_0.3 invariant_0.1 invariant_0.03"), HALF_A ("O1 O2"), HALF_B ("O5 O6"), FORK, SRC, OUT.
 set -euo pipefail
 source "$(dirname "$0")/_env.sh"
 need_gpu
-VARS=(invariant_0.3 invariant_0.1 invariant_0.03)
+read -ra VARS <<< "${VARIANTS:-invariant_0.3 invariant_0.1 invariant_0.03}"
 HALF_A="${HALF_A:-O1 O2}"
 HALF_B="${HALF_B:-O5 O6}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
