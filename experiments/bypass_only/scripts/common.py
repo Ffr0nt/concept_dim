@@ -15,6 +15,9 @@ _spec.loader.exec_module(_lt)
 
 # Вес слагаемого инвариантности: как у retain (тоже KL на тех же harmless-позициях).
 INV_LAMBDA = 1.0
+# Свип веса (15.10): при λ_inv = 1 векторы каузально инертны — проверяем, свойство ли это веса.
+# 0.01 и 0.003 добавлены после первого свипа: при 0.03 разрыв по ASR с no_add ещё не закрыт.
+INV_SWEEP = (0.3, 0.1, 0.03, 0.01, 0.003)
 
 # None — вариант не обучается здесь (векторы готовы).
 VARIANTS = {
@@ -22,6 +25,7 @@ VARIANTS = {
     "no_add": None,
     "no_abl": None,
     "invariant": {"addition_mode": "invariant", "addition_lambda": INV_LAMBDA},
+    **{f"invariant_{lam:g}": {"addition_mode": "invariant", "addition_lambda": lam} for lam in INV_SWEEP},
 }
 REUSED_FROM_LOSS_TERMS = ("no_add", "no_abl")
 
