@@ -28,7 +28,8 @@ common_axis); если запрет наведения ломает снятие
 | [scripts/common.py](scripts/common.py) | варианты (`base`, `no_add`, `no_abl` — готовые; `invariant` — обучается) и откуда брать векторы |
 | `scripts/{train,geometry,causal}.py` | обёртки над скриптами loss_terms с вариантами этого эксперимента |
 
-Отчёты: [reports/results.md](reports/results.md) — **разбор**; сырые числа —
+Отчёты: [reports/results.md](reports/results.md) — **разбор**; StrongREJECT с судьёй — `reports/strongreject.md`
+(протокол этапов 06–07 shared-refusal-component, ветка `feat/strongreject-judge`); сырые числа —
 [geometry.md](reports/geometry.md), [causal.md](reports/causal.md). Артефакты — на
 сервере в `<fork>/results/bypass_only/`, в git не хранятся.
 
@@ -39,6 +40,8 @@ common_axis); если запрет наведения ломает снятие
 2_geometry.sh  CPU  компоненты base / no_add / no_abl / invariant → reports/geometry.md
 3_causal.sh    GPU  аблация + наведение в обе стороны, 112 направлений → reports/causal.md
 4_sweep.sh     GPU  свип λ_inv ∈ {0.3, 0.1, 0.03, 0.01, 0.003}: по 12 обучений на вес, затем 2 и 3
+5_strongreject_generate.sh  GPU  StrongREJECT: ответы при аблации 7 компонент и 24 векторов (303 запроса)
+6_strongreject_judge.sh     Mac  судья-рубрика (gpt-4o-mini, OpenRouter) → reports/strongreject.md
 queue.sh            всё это по очереди: ждёт закрытия очередей loss_terms, проверяет, что
                     no_add/no_abl готовы и форк на нужной ветке, дальше — по одной задаче на любой
                     карте с местом, пауза минуту между задачами, проверка результатов, повтор до 3 раз
