@@ -33,6 +33,7 @@ BeaverTails (человеческая разметка `is_safe`), слагае�
 | [reports/geometry.md](reports/geometry.md) | числа сравнения с базовым прогоном (генерируется скриптом) |
 | [reports/ablation-summary.md](reports/ablation-summary.md) | сводка этапа 03 по 32 направлениям (генерируется скриптом) |
 | [reports/cross-energy.md](reports/cross-energy.md) | энергия компонент двух прогонов друг в друге (генерируется скриптом) |
+| [reports/dim-along-axes.md](reports/dim-along-axes.md) | какая часть DIM лежит вдоль каждой оси (генерируется скриптом) |
 | [run/](run/) | скрипты замеров: сравнение с базовым прогоном, аблация общей оси, сводка аблации |
 
 Код — в `shared-refusal-component` (прогон `qwen2.5-3b_beavertails-b1b5b6bv`), а не здесь:
