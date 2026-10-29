@@ -39,3 +39,13 @@ STEPS=03 GPU=0 bash launch/qwen2.5-3b_beavertails-b1b5b6bv.sh      # аблац�
 STEPS=06 GPU=0 bash launch/qwen2.5-3b_beavertails-b1b5b6bv.sh      # генерация StrongREJECT
 STEPS=07 bash launch/qwen2.5-3b_beavertails-b1b5b6bv.sh            # судья, с Mac
 ```
+
+Карты на сервере заняты соседями, поэтому этапы 01–06 стоят в очереди: `scripts/wait_and_launch.sh`
+в tmux-сессии `fz-wait-bt` ждёт свободную карту и запускает launch-файл сам. Опрос должен быть
+частым: освободившуюся карту очередь соседа перехватывает за полминуты.
+
+```
+tmux new-session -d -s fz-wait-bt "STEPS='01 02 03 04 05 06' INTERVAL=10 CONFIRM=2 \
+  bash scripts/wait_and_launch.sh launch/qwen2.5-3b_beavertails-b1b5b6bv.sh 1"
+tail -f results/qwen2.5-3b_beavertails-b1b5b6bv/logs/<последний>.log
+```
