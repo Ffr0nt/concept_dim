@@ -36,7 +36,13 @@ from shared_refusal.geometry import random_directions, unit
 CONFIG = "configs/qwen2.5-3b_beavertails-b1b5b6bv.yaml"
 OUT = ("component", "whitened_dim_ablation.json")
 SET_OUT = ("component", "whitened_dim_directions.pt")
-ALPHAS = [1.0, 0.9, 0.5, 0.1, 0.01, 0.001, 0.0]      # 1.0 = обычный DIM, 0.0 = чистый LDA
+# откуда берём ось pool: первый элемент набора шагов 1-2 (w_perp_pool не годится,
+# нужна сама ось) — лежит в cross_run_directions.pt как w_pool_rdo
+SET_REF = ("component", "cross_run_directions.pt")
+# 1.0 = обычный DIM, 0.0 = чистый LDA. Сетка сгущена у единицы: первый свип показал, что
+# вырезаемая величина падает между 1.0 и 0.9 сразу в десять раз (70.9 -> 6.8), то есть весь
+# переход происходит там, и грубая сетка его перешагивала.
+ALPHAS = [1.0, 0.999, 0.997, 0.99, 0.97, 0.95, 0.9, 0.5, 0.0]
 ACT_BATCH = 16
 
 
@@ -94,15 +100,18 @@ def main():
             f"lam_max {float(ev[-1]):.2f}, lam_min {float(ev[0]):.2e}, "
             f"эфф. ранг {float(ev.sum() / ev[-1]):.1f}")
 
-    u_pool = None
     w_bt = unit(load_w(run.component("rdo_only")))
     names, vecs = [], []
-    for tag, S in (("w", S_w), ("l", S_l)):
-        for a in ALPHAS:
-            names.append(f"lda_{tag}_a{a:g}")
-            vecs.append(shrink_solve(S, mu, a))
-    names += ["dim_union", "w_bt_rdo", "rand_x"]
-    vecs += [g, w_bt, unit(random_directions(len(g), 1, seed=7)[0].double())]
+    for a in ALPHAS:                      # только внутриклассовая: harmless-вариант был хуже везде
+        names.append(f"lda_a{a:g}")
+        vecs.append(shrink_solve(S_w, mu, a))
+    # опорные направления: нужно знать их вырезаемую величину на той же шкале
+    refs = {"dim_union": g, "w_bt_rdo": w_bt,
+            "u_pool": unit(torch.load(run.path(*SET_REF), map_location="cpu",
+                                      weights_only=False)["V"][0].double()),
+            "rand_x": unit(random_directions(len(g), 1, seed=7)[0].double())}
+    names += list(refs)
+    vecs += list(refs.values())
 
     geom = {n: {"cos_dim": abs(float(v @ g)), "cos_w_bt": abs(float(v @ w_bt)),
                 "cut_w": float(v @ S_w @ v), "cut_l": float(v @ S_l @ v)}
